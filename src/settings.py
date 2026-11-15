@@ -9,7 +9,8 @@ FPS = 60
 
 # ---------------------------------------------------------------- world
 SCALE = 4                      # 16x16 sprites -> 64x64 on screen
-GROUND_Y = 420                 # y of the ground surface
+TILE_SIZE = 16 * SCALE         # one tile on screen, in pixels
+TREE_ANIM_FPS = 5              # gentle sway
 
 # ---------------------------------------------------------------- player
 WALK_SPEED = 120               # pixels per second

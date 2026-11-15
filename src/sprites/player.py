@@ -16,7 +16,7 @@ if TYPE_CHECKING:  # only for type hints, avoids a circular import
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, game: Game, pos):
-        super().__init__(game.all_sprites)
+        super().__init__(game.all_sprites, game.actors)
         self.game = game
 
         player_dir = os.path.join(settings.ASSETS_DIR, "player")
