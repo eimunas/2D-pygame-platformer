@@ -141,6 +141,7 @@ class Enemy(PhysicsEntity):
         self.set_mode("alert", settings.SAMURAI_ALERT_TIME)
         self.lose_timer = 0.0
         self.game.camera.shake(*settings.SAMURAI_SPOT_SHAKE)
+        self.game.audio.play("enemy_attack")
 
     def start_attack(self):
         self.set_mode("attack")

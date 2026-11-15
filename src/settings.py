@@ -71,13 +71,13 @@ SAMURAI_LOSE_TIME = 2.0
 SAMURAI_ALERT_TIME = 0.3                   # pause after spotting, before charging
 SAMURAI_SPOT_SHAKE = (3, 0.2)
 SAMURAI_ATTACK_RANGE = 20                  # gap (px) between bodies to start a slash
-                                           # (must be < blade reach: 12 art px from his centre)
+# (must be < blade reach: 12 art px from his centre)
 SAMURAI_ATTACK_ACTIVE_FRAMES = (2, 3)      # frames where his blade hurts
 SAMURAI_ATTACK_COOLDOWN = 0.7
 SAMURAI_DAMAGE = 1
 SAMURAI_PATROL_WALK_TIME = (1.5, 4.0)      # random range, seconds
 SAMURAI_PATROL_IDLE_TIME = (1.0, 2.5)
-SAMURAI_MAX_HEALTH = 4
+SAMURAI_MAX_HEALTH = 10
 SAMURAI_HURT_TIME = 0.3                    # stagger after being hit (his attack is cancelled)
 SAMURAI_KNOCKBACK = (240, 220)             # (sideways, upwards) speed when hit
 ENEMY_HIT_SHAKE = (3, 0.1)
@@ -111,6 +111,7 @@ SOUND_VOLUMES = {              # per-sound volume (file name without extension)
     "attack": 1.0,
     "jump": 0.8,
     "dash_attack": 1.0,
+    "enemy_attack": 0.8,       # samurai spots the ninja
 }
 
 # ---------------------------------------------------------------- physics

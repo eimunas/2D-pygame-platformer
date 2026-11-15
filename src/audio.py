@@ -1,6 +1,6 @@
 """Sound effects.
 
-Every .wav/.ogg file in assets/audio/ is loaded once and played by its name:
+Every .wav/.ogg/.mp3 file in assets/audio/ is loaded once and played by its name:
 
     game.audio.play("jump")             # assets/audio/jump.wav
     game.audio.play("attack", volume=0.8)
@@ -34,7 +34,7 @@ class Audio:
             return
         for name in sorted(os.listdir(AUDIO_DIR)):
             stem, ext = os.path.splitext(name)
-            if ext.lower() in (".wav", ".ogg"):
+            if ext.lower() in (".wav", ".ogg", ".mp3"):
                 sound = pygame.mixer.Sound(os.path.join(AUDIO_DIR, name))
                 sound.set_volume(settings.SOUND_VOLUMES.get(stem, 1.0) * settings.MASTER_VOLUME)
                 self.sounds[stem] = sound
