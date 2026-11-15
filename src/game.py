@@ -13,18 +13,23 @@ import os
 import pygame
 
 from src import settings
+from src.audio import Audio
 from src.background import ParallaxBackground
 from src.camera import Camera
-from src.level import DEMO_LEVEL, load_level
+from src.level import HILL_LEVEL, load_level
+from src.ui import PlayerHealthBar, draw_enemy_bar
 
 
 class Game:
     def __init__(self):
+        # small audio buffer = sounds start right when you press the button
+        pygame.mixer.pre_init(44100, -16, 2, 512)
         pygame.init()
         self.screen = pygame.display.set_mode((settings.SCREEN_W, settings.SCREEN_H))
         pygame.display.set_caption(settings.TITLE)
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("consolas", 20)
+        self.audio = Audio()               # game.audio.play("jump")
 
         # shared per-frame state, read by sprites through their `game` reference
         self.running = True
@@ -38,17 +43,19 @@ class Game:
         self.all_sprites = pygame.sprite.Group()        # everything that gets update()
         self.background_decor = pygame.sprite.Group()   # trees: behind the player
         self.effects_back = pygame.sprite.Group()       # afterimages: behind actors
-        self.actors = pygame.sprite.Group()             # player (and later enemies)
+        self.actors = pygame.sprite.Group()             # player and enemies (drawn)
+        self.enemies = pygame.sprite.Group()            # just the enemies (for AI/combat)
         self.effects_front = pygame.sprite.Group()      # slash streaks: in front of actors
         self.foreground_decor = pygame.sprite.Group()   # rocks: in front of the player
 
         # level: creates the tilemap, decorations and self.player
         self.player = None
-        self.tilemap = load_level(self, DEMO_LEVEL)
+        self.tilemap = load_level(self, HILL_LEVEL)
         if self.player is None:
             raise ValueError("Level has no 'P' (player spawn)")
 
         self.camera = Camera(self, self.player)
+        self.health_bar = PlayerHealthBar(self)
 
         self.background = ParallaxBackground(self.screen.get_size())
         for path, factor in settings.BACKGROUND_LAYERS:
@@ -84,6 +91,7 @@ class Game:
         self.keys = pygame.key.get_pressed()
         self.all_sprites.update()
         self.camera.update()   # after sprites, so it follows this frame's position
+        self.health_bar.update(self.dt)
 
     # ------------------------------------------------------------ drawing
     def draw(self):
@@ -94,6 +102,7 @@ class Game:
         self.draw_group(self.actors)
         self.draw_group(self.effects_front)
         self.draw_group(self.foreground_decor)
+        self.draw_enemy_bars()
         self.draw_hud()                                 # screen space
         pygame.display.flip()
 
@@ -104,7 +113,14 @@ class Game:
             if sprite.rect.colliderect(view):
                 self.screen.blit(sprite.image, self.camera.apply(sprite.rect))
 
+    def draw_enemy_bars(self):
+        view = self.camera.view_rect
+        for enemy in self.enemies:
+            if enemy.rect.colliderect(view):
+                draw_enemy_bar(self.screen, enemy, self.camera)
+
     def draw_hud(self):
+        bar = self.health_bar.draw(self.screen)       # top-left health bar
         p = self.player
         anim = p.animation
         lines = [
@@ -113,4 +129,4 @@ class Game:
             f"on ground: {p.on_ground}   air jumps: {p.air_jumps_left}",
         ]
         for i, line in enumerate(lines):
-            self.screen.blit(self.font.render(line, True, (30, 24, 30)), (16, 16 + i * 26))
+            self.screen.blit(self.font.render(line, True, (30, 24, 30)), (16, bar.bottom + 10 + i * 26))

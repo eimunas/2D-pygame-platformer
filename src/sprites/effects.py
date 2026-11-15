@@ -2,6 +2,7 @@
 
     Afterimage(game, player.image, player.rect.topleft)      # ghost silhouette
     SlashStreak(game, x0, x1, y)                               # sword flash line
+    DeathFade(game, enemy.image, enemy.rect.topleft)           # defeated enemy
 """
 
 from __future__ import annotations
@@ -53,6 +54,21 @@ class Afterimage(Effect):
         mask = pygame.mask.from_surface(image)
         self.image = mask.to_surface(setcolor=color, unsetcolor=(0, 0, 0, 0)).convert_alpha()
         self.rect = self.image.get_rect(topleft=topleft)
+
+
+class DeathFade(Effect):
+    """A defeated enemy: white silhouette that drifts up and fades out."""
+
+    def __init__(self, game: Game, image, topleft, lifetime=0.45):
+        super().__init__(game, game.effects_front, lifetime, start_alpha=230)
+        mask = pygame.mask.from_surface(image)
+        self.image = mask.to_surface(setcolor=(255, 250, 240), unsetcolor=(0, 0, 0, 0)).convert_alpha()
+        self.rect = self.image.get_rect(topleft=topleft)
+        self.y = float(self.rect.y)
+
+    def animate(self):
+        self.y -= 60 * self.game.dt
+        self.rect.y = round(self.y)
 
 
 class SlashStreak(Effect):

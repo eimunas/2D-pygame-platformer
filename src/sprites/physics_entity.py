@@ -3,7 +3,8 @@
 
 Subclasses decide HOW to move by setting `self.vel`, then call
 `self.physics_update()` once per frame. This class does the rest:
-gravity, moving, and pushing the hitbox out of solid tiles.
+gravity, moving, pushing the hitbox out of solid tiles, landing on one-way
+platforms and stepping up small ledges.
 
     class Enemy(PhysicsEntity):
         def __init__(self, game, pos):
@@ -53,6 +54,8 @@ class PhysicsEntity(pygame.sprite.Sprite):
         self.gravity = gravity
         self.gravity_enabled = True             # turn off for dashes, ladders, ...
         self.max_fall_speed = max_fall_speed
+        self.step_height = settings.STEP_HEIGHT # ledges this small are walked up
+        self.drop_through = False               # True = fall through one-way platforms
         self.facing_right = True
         self.on_ground = False
         self.collisions = {"left": False, "right": False, "top": False, "bottom": False}
@@ -67,21 +70,35 @@ class PhysicsEntity(pygame.sprite.Sprite):
         if self.gravity_enabled:
             self.vel.y = min(self.vel.y + self.gravity * dt, self.max_fall_speed)
 
+        was_on_ground = self.on_ground
         self.collisions = dict.fromkeys(self.collisions, False)
         # move one axis at a time, so we always know which side we hit
-        self.move_x(self.vel.x * dt)
+        self.move_x(self.vel.x * dt, was_on_ground)
         self.move_y(self.vel.y * dt)
         self.on_ground = self.collisions["bottom"]
 
         if self.hitbox.top > self.game.tilemap.height:
             self.on_fell_out_of_map()
 
-    def move_x(self, dx):
+    def set_bottom(self, y):
+        self.hitbox.bottom = y
+        self.pos.y = y
+
+    def move_x(self, dx, was_on_ground=False):
+        tm = self.game.tilemap
         self.pos.x += dx
         self.hitbox.centerx = round(self.pos.x)
-        for tile in self.game.tilemap.solid_rects_near(self.hitbox):
+        for tile in tm.solid_rects_near(self.hitbox):
             if not self.hitbox.colliderect(tile):
                 continue
+            # tiny ledge: step up instead of stopping
+            rise = self.hitbox.bottom - tile.top
+            if was_on_ground and 0 < rise <= self.step_height:
+                stepped = self.hitbox.copy()
+                stepped.bottom = tile.top
+                if not any(stepped.colliderect(t) for t in tm.solid_rects_near(stepped)):
+                    self.set_bottom(tile.top)
+                    continue
             if dx > 0:
                 self.hitbox.right = tile.left
                 self.collisions["right"] = True
@@ -90,12 +107,11 @@ class PhysicsEntity(pygame.sprite.Sprite):
                 self.collisions["left"] = True
 
         # the map's left/right borders act as walls
-        map_w = self.game.tilemap.width
         if self.hitbox.left < 0:
             self.hitbox.left = 0
             self.collisions["left"] = True
-        elif self.hitbox.right > map_w:
-            self.hitbox.right = map_w
+        elif self.hitbox.right > tm.width:
+            self.hitbox.right = tm.width
             self.collisions["right"] = True
 
         if self.collisions["left"] or self.collisions["right"]:
@@ -103,9 +119,11 @@ class PhysicsEntity(pygame.sprite.Sprite):
             self.pos.x = self.hitbox.centerx
 
     def move_y(self, dy):
+        tm = self.game.tilemap
+        old_bottom = self.hitbox.bottom
         self.pos.y += dy
         self.hitbox.bottom = round(self.pos.y)
-        for tile in self.game.tilemap.solid_rects_near(self.hitbox):
+        for tile in tm.solid_rects_near(self.hitbox):
             if not self.hitbox.colliderect(tile):
                 continue
             if dy > 0:
@@ -114,6 +132,13 @@ class PhysicsEntity(pygame.sprite.Sprite):
             elif dy < 0:
                 self.hitbox.top = tile.bottom
                 self.collisions["top"] = True
+
+        # one-way platforms: only land on them when coming down from above
+        if dy > 0 and not self.drop_through:
+            for deck in tm.platform_rects_near(self.hitbox):
+                if self.hitbox.colliderect(deck) and old_bottom <= deck.top:
+                    self.hitbox.bottom = deck.top
+                    self.collisions["bottom"] = True
 
         if self.collisions["bottom"] or self.collisions["top"]:
             self.vel.y = 0

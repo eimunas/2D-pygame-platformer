@@ -44,7 +44,13 @@ PALETTE = {
     "hilt": (92, 58, 34, 255),        # katana handle
     "guard": (217, 164, 65, 255),     # tsuba (gold)
     "sheath": (52, 36, 30, 255),
+    "leg": (46, 53, 87, 255),         # front leg (same as suit for the ninja)
+    "leg_sh": (30, 34, 58, 255),      # back leg + feet
 }
+
+# Which character draw_ninja() draws: "ninja" (player) or "samurai" (enemy).
+# tools/generate_samurai_sprites.py switches this and PALETTE.
+STYLE = "ninja"
 
 
 # ---------------------------------------------------------------- canvas
@@ -134,9 +140,9 @@ def draw_leg(cv, hip_x, hip_y, foot_x, foot_y, bend, color):
     cv.set(foot_x, foot_y - 1, PALETTE["wrap"])
     cv.set(foot_x + 1, foot_y - 1, PALETTE["wrap"])
     # foot (2 px + toe pointing right)
-    cv.set(foot_x, foot_y, PALETTE["suit_sh"])
-    cv.set(foot_x + 1, foot_y, PALETTE["suit_sh"])
-    cv.set(foot_x + 2, foot_y, PALETTE["suit_sh"])
+    cv.set(foot_x, foot_y, PALETTE["leg_sh"])
+    cv.set(foot_x + 1, foot_y, PALETTE["leg_sh"])
+    cv.set(foot_x + 2, foot_y, PALETTE["leg_sh"])
 
 
 def draw_ninja(pose, outline=True):
@@ -161,8 +167,13 @@ def draw_ninja(pose, outline=True):
     hip_x, hip_y = 7, 11 + b
     shoulder_y = 8 + b
 
-    # katana sheath (behind everything)
-    cv.line(tx0 - 1, torso_y, tx0 + 3, torso_y + 3, P["sheath"])
+    samurai = STYLE == "samurai"
+
+    # katana sheath (behind everything): ninja on the back, samurai at the hip
+    if samurai:
+        cv.line(tx0 - 3, torso_y + 2, tx0 + 1, torso_y + 3, P["sheath"])
+    else:
+        cv.line(tx0 - 1, torso_y, tx0 + 3, torso_y + 3, P["sheath"])
 
     # back arm
     bhx, bhy = pose["back_hand"]
@@ -170,38 +181,63 @@ def draw_ninja(pose, outline=True):
 
     # back leg
     fx, lift = pose["back_foot"]
-    draw_leg(cv, hip_x, hip_y, hip_x + fx, 14 - lift, pose["back_bend"], P["suit_sh"])
+    draw_leg(cv, hip_x, hip_y, hip_x + fx, 14 - lift, pose["back_bend"], P["leg_sh"])
 
     # torso
     cv.rect(tx0, torso_y, tx0 + 3, torso_y + 3, P["suit"])
-    cv.rect(tx0, torso_y + 3, tx0 + 3, torso_y + 3, P["red_dk"])  # sash
+    cv.rect(tx0, torso_y + 3, tx0 + 3, torso_y + 3, P["red_dk"])  # sash / obi
+    if samurai:
+        cv.rect(tx0, torso_y + 1, tx0 + 3, torso_y + 1, P["suit_sh"])  # armour lacing band
+        cv.rect(tx0 - 1, torso_y, tx0 - 1, torso_y + 1, P["suit"])     # sode (shoulder guards)
+        cv.rect(tx0 + 4, torso_y, tx0 + 4, torso_y + 1, P["suit"])
 
     # front leg
     fx, lift = pose["front_foot"]
-    draw_leg(cv, hip_x, hip_y, hip_x + fx, 14 - lift, pose["front_bend"], P["suit"])
+    draw_leg(cv, hip_x, hip_y, hip_x + fx, 14 - lift, pose["front_bend"], P["leg"])
 
-    # head / hood
-    cv.rect(hx0, head_y, hx0 + 4, head_y + 4, P["suit"])
-    cv.set(hx0 + 1, head_y, P["suit_hi"])
-    cv.set(hx0 + 2, head_y, P["suit_hi"])
-    # headband
-    cv.rect(hx0, head_y + 1, hx0 + 4, head_y + 1, P["red"])
-    # eye slit
-    cv.rect(hx0 + 2, head_y + 2, hx0 + 4, head_y + 2, P["skin"])
-    cv.set(hx0 + 3, head_y + 2, P["eye"])
+    if samurai:
+        # kabuto helmet, flared neck guard, gold crest, open face with moustache
+        cv.rect(hx0, head_y, hx0 + 4, head_y + 1, P["iron"])
+        cv.set(hx0 + 1, head_y, P["iron_hi"])
+        cv.set(hx0 + 2, head_y, P["iron_hi"])
+        cv.rect(hx0 - 1, head_y + 2, hx0, head_y + 3, P["iron"])      # shikoro (neck guard)
+        cv.rect(hx0 + 1, head_y + 2, hx0 + 4, head_y + 4, P["skin"])  # face
+        cv.set(hx0 + 3, head_y + 2, P["eye"])
+        cv.set(hx0 + 2, head_y + 2, P["eye"])                          # stern brow
+        cv.rect(hx0 + 3, head_y + 4, hx0 + 4, head_y + 4, P["eye"])   # moustache
+        cv.set(hx0 + 1, head_y + 4, P["iron"])                         # chin strap
+        cv.set(hx0 + 3, head_y - 1, P["guard"])                        # maedate (crest)
+        cv.set(hx0 + 2, head_y - 2, P["guard"])
+        cv.set(hx0 + 4, head_y - 2, P["guard"])
+    else:
+        # head / hood
+        cv.rect(hx0, head_y, hx0 + 4, head_y + 4, P["suit"])
+        cv.set(hx0 + 1, head_y, P["suit_hi"])
+        cv.set(hx0 + 2, head_y, P["suit_hi"])
+        # headband
+        cv.rect(hx0, head_y + 1, hx0 + 4, head_y + 1, P["red"])
+        # eye slit
+        cv.rect(hx0 + 2, head_y + 2, hx0 + 4, head_y + 2, P["skin"])
+        cv.set(hx0 + 3, head_y + 2, P["eye"])
 
-    # katana hilt over the back shoulder (not when the sword is in his hand)
+    # katana hilt (not when the sword is in his hand)
     if pose.get("sword_on_back", True):
-        cv.set(hx0 - 1, torso_y, P["guard"])
-        cv.set(hx0 - 2, torso_y - 1, P["hilt"])
-        cv.set(hx0 - 3, torso_y - 2, P["hilt"])
+        if samurai:                                   # worn at the hip, hilt forward
+            cv.set(tx0 + 4, torso_y + 2, P["guard"])
+            cv.set(tx0 + 5, torso_y + 1, P["hilt"])
+            cv.set(tx0 + 6, torso_y, P["hilt"])
+        else:                                         # over the back shoulder
+            cv.set(hx0 - 1, torso_y, P["guard"])
+            cv.set(hx0 - 2, torso_y - 1, P["hilt"])
+            cv.set(hx0 - 3, torso_y - 2, P["hilt"])
 
-    # headband tails
-    tx, ty = hx0 - 1, head_y + 1
-    for dx, dy in pose["tail2"]:
-        cv.set(tx + dx, ty + dy, P["red_dk"])
-    for dx, dy in pose["tail"]:
-        cv.set(tx + dx, ty + dy, P["red"])
+    # headband tails (ninja only)
+    if not samurai:
+        tx, ty = hx0 - 1, head_y + 1
+        for dx, dy in pose["tail2"]:
+            cv.set(tx + dx, ty + dy, P["red_dk"])
+        for dx, dy in pose["tail"]:
+            cv.set(tx + dx, ty + dy, P["red"])
 
     # front arm (drawn last, over torso)
     fhx, fhy = pose["front_hand"]
@@ -260,7 +296,13 @@ def idle_frames(n=6):
 
 
 def gait_frames(n, amp, lift, bend, arm_amp, lean, tail_len, tail_amp, run):
-    frames = []
+    return [draw_ninja(pose) for pose in
+            gait_poses(n, amp, lift, bend, arm_amp, lean, tail_len, tail_amp, run)]
+
+
+def gait_poses(n, amp, lift, bend, arm_amp, lean, tail_len, tail_amp, run):
+    """Pose dicts for a walk/run cycle (also reused for the samurai's sword run)."""
+    poses = []
     for i in range(n):
         p = 2 * math.pi * i / n
         s = math.sin(p)
@@ -281,7 +323,7 @@ def gait_frames(n, amp, lift, bend, arm_amp, lean, tail_len, tail_amp, run):
             front_hand = (round(-arm_amp * s), 2)
             back_hand = (round(arm_amp * s) - 1, 2)
 
-        frames.append(draw_ninja({
+        poses.append({
             "bob": bob,
             "lean": lean,
             "back_foot": (back_x, back_lift),
@@ -292,8 +334,8 @@ def gait_frames(n, amp, lift, bend, arm_amp, lean, tail_len, tail_amp, run):
             "front_hand": front_hand,
             "tail": tail_points(tail_len, p * 2, tail_amp),
             "tail2": [(dx, dy + 1) for dx, dy in tail_points(tail_len - 1, p * 2 + 1.7, tail_amp)],
-        }))
-    return frames
+        })
+    return poses
 
 
 def air_frames(kind, n=4):

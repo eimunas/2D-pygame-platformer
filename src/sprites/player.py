@@ -55,6 +55,7 @@ class Player(PhysicsEntity):
         self.attack_queued = False     # clicked during a swing -> chain the next one
         self.combo_timer = 0.0         # time left to continue the combo after a swing
         self.lunge_speed = 0.0         # forward push during a swing
+        self.attack_id = 0             # +1 per swing/dash, so each one hits an enemy once
 
         # dash attack
         self.dash_attacking = False    # whole move: dash + finishing cut
@@ -63,6 +64,12 @@ class Player(PhysicsEntity):
         self.air_dash_available = True # one dash per airtime
         self.dash_start_x = 0
         self.ghost_timer = 0.0
+
+        # health
+        self.max_health = settings.PLAYER_MAX_HEALTH
+        self.health = self.max_health
+        self.invuln_timer = 0.0        # > 0: can't be hurt (blinking)
+        self.hurt_timer = 0.0          # > 0: knocked back, no control
 
         self.image = self.animation.image
         self.align_image()
@@ -82,9 +89,14 @@ class Player(PhysicsEntity):
         return direction
 
     def handle_input(self):
+        if self.hurt_timer > 0:       # knocked back: no control, keep the knockback
+            self.direction = 0
+            self.drop_through = False
+            return
         keys = self.game.keys
         self.direction = self.get_direction()
         self.running = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        self.drop_through = keys[pygame.K_s]     # hold S to drop through bridges
 
         # turn first, so pressing a direction + dash/attack together goes that way
         if self.direction != 0 and not (self.attacking or self.dash_attacking):
@@ -134,6 +146,7 @@ class Player(PhysicsEntity):
 
     # ------------------------------------------------------------ actions
     def jump(self):
+        self.game.audio.play("jump")
         self.vel.y = -settings.JUMP_SPEED
         self.jump_buffer_timer = 0.0
         self.coyote_timer = 0.0
@@ -141,6 +154,7 @@ class Player(PhysicsEntity):
         self.cancel_dash()
 
     def double_jump(self):
+        self.game.audio.play("jump")
         self.cancel_attack()
         self.cancel_dash()
         self.vel.y = -settings.DOUBLE_JUMP_SPEED
@@ -159,7 +173,9 @@ class Player(PhysicsEntity):
         self.state = attack["anim"]
         self.animation.reset()
         self.lunge_speed = attack["lunge"]
+        self.attack_id += 1
         self.game.camera.shake(*attack["shake"])
+        self.game.audio.play("attack")
 
     def cancel_attack(self):
         if self.attacking:
@@ -193,10 +209,12 @@ class Player(PhysicsEntity):
         self.gravity_enabled = False          # dash in a straight line, even in the air
         self.vel.y = 0
         self.dash_start_x = self.hitbox.centerx
+        self.attack_id += 1
         self.ghost_timer = 0.0                # first afterimage right away
         self.state = "dash"
         self.animation.reset()
         self.game.camera.shake(*settings.DASH_SHAKE)
+        self.game.audio.play("dash_attack")
 
     def end_dash_movement(self, hit_wall=False):
         """Dash distance covered (or a wall reached): flash the cut along the path."""
@@ -220,6 +238,48 @@ class Player(PhysicsEntity):
         if self.ghost_timer <= 0:
             Afterimage(self.game, self.image, self.rect.topleft)
             self.ghost_timer += settings.GHOST_INTERVAL
+
+    # ------------------------------------------------------------ damage
+    def take_damage(self, amount, source_x):
+        """Hurt the player. Returns True if the hit counted.
+        Ignored while invulnerable or in the middle of a dash."""
+        if self.invuln_timer > 0 or self.dash_timer > 0:
+            return False
+        self.health -= amount
+        self.cancel_attack()
+        self.cancel_dash()
+        self.flipping = False
+        self.invuln_timer = settings.PLAYER_INVULN_TIME
+        self.hurt_timer = settings.PLAYER_HURT_TIME
+        away = 1 if self.hitbox.centerx >= source_x else -1
+        kx, ky = settings.PLAYER_KNOCKBACK
+        self.vel.update(away * kx, -ky)
+        self.game.camera.shake(*settings.HURT_SHAKE)
+        if self.health <= 0:
+            self.die()
+        return True
+
+    def die(self):
+        """For now: back to the spawn point with full health."""
+        self.health = self.max_health
+        self.hurt_timer = 0.0
+        self.respawn()
+
+    @property
+    def current_damage(self):
+        if self.dash_attacking:
+            return settings.DASH_DAMAGE
+        return settings.PLAYER_ATTACKS[self.combo_step]["damage"]
+
+    def hit_enemies(self):
+        """Damage every enemy the blade touches - once per swing/dash."""
+        hb = self.attack_hitbox
+        if hb is None:
+            return
+        for enemy in list(self.game.enemies):        # list(): enemies may die here
+            if enemy.last_hit_by != self.attack_id and hb.colliderect(enemy.hitbox):
+                enemy.last_hit_by = self.attack_id
+                enemy.take_damage(self.current_damage, self.hitbox.centerx)
 
     # ------------------------------------------------------------ hit areas
     @property
@@ -273,6 +333,8 @@ class Player(PhysicsEntity):
         self.jump_buffer_timer = max(0.0, self.jump_buffer_timer - dt)
         self.combo_timer = max(0.0, self.combo_timer - dt)
         self.dash_cooldown = max(0.0, self.dash_cooldown - dt)
+        self.invuln_timer = max(0.0, self.invuln_timer - dt)
+        self.hurt_timer = max(0.0, self.hurt_timer - dt)
 
         self.handle_input()
         self.physics_update()
@@ -291,6 +353,7 @@ class Player(PhysicsEntity):
         if self.attacking and self.animation.finished:
             self.finish_attack()
             self.set_state(self.choose_state())
+        self.hit_enemies()       # before the attack may end, so last frames still count
         if self.dash_attacking and self.dash_timer <= 0 and self.animation.finished:
             self.dash_attacking = False
             self.lunge_speed = 0.0
@@ -298,11 +361,17 @@ class Player(PhysicsEntity):
         self.image = self.animation.image
         if not self.facing_right:
             self.image = pygame.transform.flip(self.image, True, False)
+        if self.invuln_timer > 0 and int(self.invuln_timer * 15) % 2 == 0:
+            self.image = self.image.copy()                 # blink while invulnerable
+            self.image.set_alpha(70)
         self.align_image()
         self.spawn_afterimages(dt)
 
     def on_fell_out_of_map(self):
         """Respawn instead of disappearing."""
+        self.respawn()
+
+    def respawn(self):
         self.pos.update(self.spawn_point)
         self.vel.update(0, 0)
         self.hitbox.midbottom = (round(self.pos.x), round(self.pos.y))
