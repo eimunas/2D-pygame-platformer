@@ -23,16 +23,21 @@ TILES = {"G": "grass", "D": "dirt"}
 TREES = {"s": "sakura", "p": "pine", "b": "bamboo"}
 ROCKS = {"r": "pebbles", "m": "boulder", "c": "cairn"}
 
+# 45 x 9 tiles (three screens wide). Each row is split into 15-column
+# chunks only to make it easier to read - Python joins adjacent strings.
+#
+# The player jumps ~2.6 tiles, so every platform here is at most 2 tiles
+# above the place you jump from.
 DEMO_LEVEL = [
-    "...............",
-    "......G........",
-    "..........GGGG.",
-    "...GG.....DDDD.",
-    "...............",
-    "...............",
-    ".s..c.P..p.m.br",
-    "GGGGGGGGGGGGGGG",
-    "DDDDDDDDDDDDDDD",
+    "..............." "..............." "...............",
+    "..............." "..............." "............GGG",
+    "..............." "..............." "...............",
+    "..........GGGG." "..........GGGG." "........GGGG...",
+    "..........DDDD." "..............." "........DDDD...",
+    ".......GG......" ".......GG......" ".....GG........",
+    ".s..c.P....m..." ".p..b.rDD......" ".s.....m.....c.",
+    "GGGGGGGGGGGGGGG" "GGGGGGGGGGGGGGG" "GGGGGGGGGGGGGGG",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD",
 ]
 
 

@@ -26,23 +26,38 @@ def load_frames(folder, scale=1):
 
 
 class Animation:
-    """Loops through a list of frames at a fixed frame rate."""
+    """Plays a list of frames at a fixed frame rate.
 
-    def __init__(self, frames, fps, start=0):
+    loop=True  -> repeats forever
+    loop=False -> plays once, then `finished` becomes True
+    """
+
+    def __init__(self, frames, fps, start=0, loop=True):
         self.frames = frames
         self.frame_time = 1.0 / fps
+        self.loop = loop
         self.timer = 0.0
         self.index = start % len(frames)
+        self.finished = False
 
     def reset(self):
         self.timer = 0.0
         self.index = 0
+        self.finished = False
 
     def update(self, dt):
+        if self.finished:
+            return
         self.timer += dt
         while self.timer >= self.frame_time:
             self.timer -= self.frame_time
-            self.index = (self.index + 1) % len(self.frames)
+            if self.index + 1 < len(self.frames):
+                self.index += 1
+            elif self.loop:
+                self.index = 0
+            else:
+                self.finished = True   # stay on the last frame
+                break
 
     @property
     def image(self):
