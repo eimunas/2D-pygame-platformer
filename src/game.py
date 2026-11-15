@@ -4,14 +4,14 @@ Pass the Game instance to any object that needs shared state, e.g.:
 
     class Enemy(pygame.sprite.Sprite):
         def __init__(self, game, pos):
-            super().__init__(game.all_sprites)
-            self.game = game          # -> game.dt, game.keys, game.screen, game.player ...
+            super().__init__(game.all_sprites, game.actors)
+            self.game = game    # -> game.dt, game.keys, game.screen, game.tilemap, game.player ...
 """
 
 import pygame
 
 from src import settings
-from src.sprites import Player
+from src.level import DEMO_LEVEL, load_level
 
 
 class Game:
@@ -28,10 +28,16 @@ class Game:
         self.keys = pygame.key.get_pressed()
 
         # sprite groups
-        self.all_sprites = pygame.sprite.Group()
+        self.all_sprites = pygame.sprite.Group()        # everything that gets update()
+        self.background_decor = pygame.sprite.Group()   # trees: behind the player
+        self.actors = pygame.sprite.Group()             # player (and later enemies)
+        self.foreground_decor = pygame.sprite.Group()   # rocks: in front of the player
 
-        # entities
-        self.player = Player(self, (settings.SCREEN_W // 2, settings.GROUND_Y))
+        # level: creates the tilemap, decorations and self.player
+        self.player = None
+        self.tilemap = load_level(self, DEMO_LEVEL)
+        if self.player is None:
+            raise ValueError("Level has no 'P' (player spawn)")
 
     # ------------------------------------------------------------ loop
     def run(self):
@@ -56,16 +62,16 @@ class Game:
     # ------------------------------------------------------------ drawing
     def draw(self):
         self.draw_background()
-        self.all_sprites.draw(self.screen)
+        self.tilemap.draw(self.screen)
+        self.background_decor.draw(self.screen)
+        self.actors.draw(self.screen)
+        self.foreground_decor.draw(self.screen)
         self.draw_hud()
         pygame.display.flip()
 
     def draw_background(self):
-        w, h, gy = settings.SCREEN_W, settings.SCREEN_H, settings.GROUND_Y
         self.screen.fill((236, 214, 180))                                  # dusk sky
         pygame.draw.circle(self.screen, (214, 72, 52), (760, 170), 70)     # red sun
-        pygame.draw.rect(self.screen, (64, 52, 60), (0, gy, w, h - gy))    # ground
-        pygame.draw.line(self.screen, (40, 30, 36), (0, gy), (w, gy), 3)
 
     def draw_hud(self):
         anim = self.player.animation
