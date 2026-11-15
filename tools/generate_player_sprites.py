@@ -16,6 +16,10 @@ Output:
     assets/player/attack1..3/attackN_00.png .. _05.png  (6 frames each, 32x24:
         horizontal cut, rising cut, heavy overhead cut)
     assets/player/dash/dash_00.png .. dash_03.png   (4 frames, 32x24, dash attack)
+    assets/player/death/death_00.png .. death_08.png (9 frames, 32x16: wounded,
+        kneels, falls face-down)
+    assets/player/bow/bow_00.png .. bow_05.png     (6 frames, 32x24: draw and shoot the
+        bow bought from the trader; the arrow leaves on frame 4)
 
 The character faces RIGHT. Flip horizontally in-game for left.
 """
@@ -48,8 +52,8 @@ PALETTE = {
     "leg_sh": (30, 34, 58, 255),      # back leg + feet
 }
 
-# Which character draw_ninja() draws: "ninja" (player) or "samurai" (enemy).
-# tools/generate_samurai_sprites.py switches this and PALETTE.
+# Which character draw_ninja() draws: "ninja" (player), "samurai", "archer",
+# "shinobi" (enemies) or "trader" (NPC). The generators in tools/ switch this and PALETTE.
 STYLE = "ninja"
 
 
@@ -168,11 +172,28 @@ def draw_ninja(pose, outline=True):
     shoulder_y = 8 + b
 
     samurai = STYLE == "samurai"
+    archer = STYLE == "archer"
+    shinobi = STYLE == "shinobi"           # enemy ninja: dagger at the hip, no katana
+    trader = STYLE == "trader"             # NPC merchant: straw hat, big pack, no weapon
+    armoured = samurai or archer
 
-    # katana sheath (behind everything): ninja on the back, samurai at the hip
+    # behind everything: ninja katana on the back, samurai katana at the hip,
+    # archer bow + quiver on the back
     if samurai:
         cv.line(tx0 - 3, torso_y + 2, tx0 + 1, torso_y + 3, P["sheath"])
-    else:
+    elif archer:
+        cv.line(tx0 - 3, torso_y - 3, tx0 + 3, torso_y + 4, P["bow"])        # slung bow stave
+        cv.rect(tx0 - 1, torso_y - 1, tx0, torso_y + 3, P["quiver"])        # quiver
+        cv.set(tx0 - 1, torso_y - 2, P["fletch"])                          # arrow feathers
+        cv.set(tx0, torso_y - 3, P["fletch_red"])
+    elif trader:
+        # wooden backpack frame with a bundle on top
+        cv.rect(tx0 - 3, torso_y - 4, tx0, torso_y + 3, P["pack"])
+        cv.rect(tx0 - 3, torso_y - 4, tx0 - 3, torso_y + 3, P["pack_sh"])
+        cv.rect(tx0 - 3, torso_y - 1, tx0, torso_y - 1, P["pack_sh"])       # shelf
+        cv.rect(tx0 - 2, torso_y - 6, tx0, torso_y - 5, P["bundle"])        # cloth bundle
+        cv.set(tx0 - 1, torso_y - 6, P["bundle_hi"])
+    elif not shinobi:
         cv.line(tx0 - 1, torso_y, tx0 + 3, torso_y + 3, P["sheath"])
 
     # back arm
@@ -186,8 +207,9 @@ def draw_ninja(pose, outline=True):
     # torso
     cv.rect(tx0, torso_y, tx0 + 3, torso_y + 3, P["suit"])
     cv.rect(tx0, torso_y + 3, tx0 + 3, torso_y + 3, P["red_dk"])  # sash / obi
-    if samurai:
+    if armoured:
         cv.rect(tx0, torso_y + 1, tx0 + 3, torso_y + 1, P["suit_sh"])  # armour lacing band
+    if samurai:
         cv.rect(tx0 - 1, torso_y, tx0 - 1, torso_y + 1, P["suit"])     # sode (shoulder guards)
         cv.rect(tx0 + 4, torso_y, tx0 + 4, torso_y + 1, P["suit"])
 
@@ -209,6 +231,28 @@ def draw_ninja(pose, outline=True):
         cv.set(hx0 + 3, head_y - 1, P["guard"])                        # maedate (crest)
         cv.set(hx0 + 2, head_y - 2, P["guard"])
         cv.set(hx0 + 4, head_y - 2, P["guard"])
+    elif trader:
+        # straw hat, friendly face with a grey beard
+        cv.rect(hx0, head_y + 1, hx0 + 4, head_y + 4, P["skin"])      # face
+        cv.rect(hx0, head_y + 1, hx0, head_y + 3, P["hair"])          # hair at the back
+        cv.set(hx0 + 3, head_y + 2, P["eye"])
+        cv.rect(hx0 + 2, head_y + 4, hx0 + 4, head_y + 4, P["beard"]) # beard
+        cv.set(hx0 + 3, head_y + 5, P["beard"])
+        cv.rect(hx0 + 1, head_y - 1, hx0 + 3, head_y - 1, P["hat"])   # hat
+        cv.rect(hx0 - 1, head_y, hx0 + 5, head_y, P["hat"])
+        cv.set(hx0 + 2, head_y - 1, P["hat_hi"])
+        cv.rect(hx0 - 1, head_y + 1, hx0 + 5, head_y + 1, P["hat_sh"]) # brim shade over the eyes line
+        cv.set(hx0 + 3, head_y + 2, P["eye"])
+    elif archer:
+        # jingasa: wide conical straw hat over an open face
+        cv.rect(hx0, head_y + 1, hx0 + 4, head_y + 4, P["skin"])      # face
+        cv.rect(hx0, head_y + 1, hx0, head_y + 4, P["eye"])           # hair at the back
+        cv.set(hx0 + 3, head_y + 2, P["eye"])
+        cv.set(hx0 + 4, head_y + 4, P["suit_sh"])                      # chin strap
+        cv.rect(hx0 + 1, head_y - 1, hx0 + 3, head_y - 1, P["hat"])   # hat peak
+        cv.rect(hx0 - 1, head_y, hx0 + 5, head_y, P["hat"])
+        cv.rect(hx0 - 2, head_y + 1, hx0 + 6, head_y + 1, P["hat_sh"])  # wide brim
+        cv.set(hx0 + 2, head_y - 1, P["hat_hi"])
     else:
         # head / hood
         cv.rect(hx0, head_y, hx0 + 4, head_y + 4, P["suit"])
@@ -226,13 +270,19 @@ def draw_ninja(pose, outline=True):
             cv.set(tx0 + 4, torso_y + 2, P["guard"])
             cv.set(tx0 + 5, torso_y + 1, P["hilt"])
             cv.set(tx0 + 6, torso_y, P["hilt"])
+        elif archer or trader:                        # no katana
+            pass
+        elif shinobi:                                 # tanto tucked in the sash
+            cv.set(tx0 + 4, torso_y + 3, P["sheath"])
+            cv.set(tx0 + 4, torso_y + 2, P["hilt"])
+            cv.set(tx0 + 5, torso_y + 1, P["hilt"])
         else:                                         # over the back shoulder
             cv.set(hx0 - 1, torso_y, P["guard"])
             cv.set(hx0 - 2, torso_y - 1, P["hilt"])
             cv.set(hx0 - 3, torso_y - 2, P["hilt"])
 
-    # headband tails (ninja only)
-    if not samurai:
+    # headband tails (ninjas only)
+    if not armoured and not trader:
         tx, ty = hx0 - 1, head_y + 1
         for dx, dy in pose["tail2"]:
             cv.set(tx + dx, ty + dy, P["red_dk"])
@@ -400,14 +450,16 @@ SLASH = [(255, 255, 255, 255), (255, 240, 196, 255), (255, 204, 104, 255)]  # ed
 
 
 def draw_katana(cv, hx, hy, angle_deg, length=10):
-    """Katana held at (hx, hy); angle 0 = forward, -90 = up, 90 = down."""
+    """Katana held at (hx, hy); angle 0 = forward, -90 = up, 90 = down.
+    A short length (e.g. 4) makes a dagger: shorter handle, tiny guard."""
     a = math.radians(angle_deg)
     dx, dy = math.cos(a), math.sin(a)
-    t = -2.0
+    dagger = length < 6
+    t = -1.0 if dagger else -2.0
     while t <= length:
         if t < 0:
             color = PALETTE["hilt"]
-        elif t < 1.5:
+        elif t < (0.5 if dagger else 1.5):
             color = PALETTE["guard"]
         else:
             color = BLADE
@@ -428,7 +480,7 @@ def draw_slash(cv, cx, cy, radius, a0, a1, thick):
             cv.set(cx + r * math.cos(ang), cy + r * math.sin(ang), SLASH[min(k, 2)])
 
 
-def attack_frame(pose, sword_angle, slash=None, phase=0.0):
+def attack_frame(pose, sword_angle, slash=None, phase=0.0, blade_length=10):
     pose = dict(pose, sword_on_back=False)
     pose.setdefault("back_foot", (-2, 0))
     pose.setdefault("front_foot", (2, 0))
@@ -449,7 +501,7 @@ def attack_frame(pose, sword_angle, slash=None, phase=0.0):
     sx = BODY_OX + 6 + pose["lean"] + 2
     sy = BODY_OY + 8 + pose["bob"]
     fhx, fhy = pose["front_hand"]
-    draw_katana(cv, sx + fhx, sy + fhy, sword_angle)
+    draw_katana(cv, sx + fhx, sy + fhy, sword_angle, blade_length)
     cv.set(sx + fhx, sy + fhy, PALETTE["skin"])     # hand gripping the hilt
     cv.outline(PALETTE["outline"])
     if slash:                                       # effect drawn on top, no outline
@@ -515,11 +567,105 @@ def attack_frames(name):
             for i, (pose, angle, slash) in enumerate(steps)]
 
 
+# ---------------------------------------------------------------- death
+# 32x16 frames (lying down he's wider than tall); the 16x16 body sits at x 8..23
+# so his feet stay bottom-centred like every other animation.
+DEATH_W, DEATH_OX = 32, 8
+BLOOD = (150, 18, 24, 255)
+BLOOD_HI = (206, 40, 40, 255)
+
+
+def rotate_sized(cv, degrees, cx, cy):
+    """Nearest-neighbour rotation (clockwise on screen) of a SizedCanvas."""
+    out = SizedCanvas(cv.w, cv.h)
+    t = math.radians(degrees)
+    c, s = math.cos(t), math.sin(t)
+    for y in range(cv.h):
+        for x in range(cv.w):
+            dx, dy = x - cx, y - cy
+            ix = round(cx + dx * c + dy * s)
+            iy = round(cy - dx * s + dy * c)
+            if 0 <= ix < cv.w and 0 <= iy < cv.h:
+                out.px[y][x] = cv.px[iy][ix]
+    return out
+
+
+def death_body(pose, wound=True, pad=0):
+    """The ninja (no outline) on a 32x16 canvas, with a bleeding chest wound.
+    `pad` adds empty rows above and below (room to rotate without clipping)."""
+    body = draw_ninja(pose, outline=False)
+    cv = SizedCanvas(DEATH_W, SIZE + 2 * pad)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if body.px[y][x] is not None:
+                cv.set(x + DEATH_OX, y + pad, body.px[y][x])
+    if wound:
+        tx, ty = DEATH_OX + 6 + pose["lean"], pad + 7 + pose["bob"]   # torso top-left
+        cv.set(tx + 2, ty + 1, BLOOD_HI)
+        cv.set(tx + 3, ty + 1, BLOOD)
+        cv.set(tx + 2, ty + 2, BLOOD)
+    return cv
+
+
+def death_frames():
+    """Hit -> clutches the wound and staggers -> drops to his knees -> falls
+    face-down, slowly. Played once; the last frame is held."""
+    limp_tail = [(0, 1), (-1, 2), (-2, 3)]
+    limp_tail2 = [(0, 2), (-1, 3)]
+    stand = {"back_foot": (-1, 0), "front_foot": (1, 0), "back_bend": 0, "front_bend": 0,
+             "tail": limp_tail, "tail2": limp_tail2}
+    poses = [
+        # staggers back, hand pressed to the wound
+        dict(stand, bob=0, lean=-1, back_foot=(-2, 0), back_hand=(-1, 2), front_hand=(1, 0)),
+        dict(stand, bob=1, lean=-1, back_foot=(-2, 0), back_hand=(-1, 3), front_hand=(0, 1)),
+        # knees buckle
+        dict(stand, bob=2, lean=0, back_foot=(-2, 0), front_foot=(2, 0), back_bend=2,
+             front_bend=2, back_hand=(0, 3), front_hand=(1, 1)),
+        # on his knees, head hanging, a hand reaching for the ground
+        dict(stand, bob=3, lean=1, back_foot=(-3, 0), front_foot=(2, 0), back_bend=3,
+             front_bend=3, back_hand=(0, 3), front_hand=(2, 3)),
+    ]
+    frames = []
+    for pose in poses:
+        cv = death_body(pose)
+        cv.outline(PALETTE["outline"])
+        frames.append(cv)
+
+    # topple forward from the knees: rotate the kneeling body around his knees
+    # first tipping forward from the knees, then (legs sliding back) flat on his face
+    pad = SIZE
+    kneel = death_body(poses[-1], pad=pad)
+    flat = death_body(dict(stand, bob=0, lean=0, back_foot=(-1, 0), front_foot=(0, 0),
+                           back_hand=(1, 2), front_hand=(2, 1)), pad=pad)
+    steps = [(kneel, (DEATH_OX + 9, pad + SIZE - 1), a) for a in (18, 40)]
+    steps += [(flat, (DEATH_OX + 6, pad + SIZE - 1), a) for a in (66, 84, 90)]
+    for src, pivot, angle in steps:
+        big = rotate_sized(src, angle, *pivot)
+        # rest on the floor: crop to 32x16 with the lowest filled row on the bottom edge
+        bottom = max(y for y in range(big.h) for x in range(big.w) if big.px[y][x] is not None)
+        cv = SizedCanvas(DEATH_W, SIZE)
+        for y in range(big.h):
+            for x in range(big.w):
+                if big.px[y][x] is not None:
+                    cv.set(x, y - bottom + SIZE - 1, big.px[y][x])
+        cv.outline(PALETTE["outline"])
+        frames.append(cv)
+    return frames
+
+
+def bow_frames():
+    """The ninja shooting a bow: the archer's draw-and-release frames with the
+    ninja's body and palette (imported lazily - the archer tool imports this module)."""
+    import generate_archer_sprites as archer
+    return archer.shoot_frames(tails=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join("assets", "player"))
     ap.add_argument("--preview", help="write a scaled preview sheet to this path")
     ap.add_argument("--scale", type=int, default=8)
+    ap.add_argument("--only", nargs="*", help="only write these animations (e.g. --only death)")
     args = ap.parse_args()
 
     anims = {
@@ -535,7 +681,11 @@ def main():
         "attack2": attack_frames("attack2"),
         "attack3": attack_frames("attack3"),
         "dash": attack_frames("dash"),
+        "death": death_frames(),
+        "bow": bow_frames(),
     }
+    if args.only:
+        anims = {k: v for k, v in anims.items() if k in args.only}
 
     for name, frames in anims.items():
         for i, cv in enumerate(frames):

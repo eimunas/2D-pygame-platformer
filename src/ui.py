@@ -83,3 +83,16 @@ def draw_enemy_bar(surface, enemy, camera):
     world = pygame.Rect(0, 0, w, h)
     world.midbottom = (enemy.hitbox.centerx, enemy.hitbox.top - 14)
     draw_bar(surface, camera.apply(world), enemy.health, enemy.max_health)
+
+
+def draw_coin_counter(surface, icon, small_font, coins, topright, font=None):
+    """Coin icon + "x 3", right-aligned at `topright`. Returns its rect."""
+    font = font or small_font
+    label = font.render(f"x {coins}", True, (250, 244, 232))
+    shadow = font.render(f"x {coins}", True, (14, 12, 22))
+    lr = label.get_rect(topright=topright)
+    ir = icon.get_rect(midright=(lr.left - 6, lr.centery))
+    surface.blit(icon, ir)
+    surface.blit(shadow, lr.move(2, 2))
+    surface.blit(label, lr)
+    return ir.union(lr)

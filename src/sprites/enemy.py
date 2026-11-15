@@ -42,12 +42,26 @@ MODE_ANIM = {
 
 
 class Enemy(PhysicsEntity):
+    # Subclasses (e.g. Archer) override these to change look and stats.
+    ASSET_DIR = SAMURAI_DIR
+    ANIM_FPS = settings.SAMURAI_ANIM_FPS
+    PLAY_ONCE = ("attack",)                    # animations that don't loop
+    MODE_ANIM = MODE_ANIM
+    MAX_HEALTH = settings.SAMURAI_MAX_HEALTH
+    SIGHT_RANGE = settings.SAMURAI_SIGHT_RANGE
+    SIGHT_HEIGHT = settings.SAMURAI_SIGHT_HEIGHT
+    SPOT_SOUND = "enemy_attack"                # None = silent when spotting the ninja
+    ALERT_TIME = settings.SAMURAI_ALERT_TIME
+    ATTACK_ACTIVE_FRAMES = settings.SAMURAI_ATTACK_ACTIVE_FRAMES
+    BLADE_REACH = 12                           # art px from his centre the blade reaches
+    DAMAGE = settings.SAMURAI_DAMAGE
+
     def __init__(self, game: Game, pos):
         super().__init__(game, pos, settings.SAMURAI_HITBOX, groups=(game.actors, game.enemies))
         self.animations = {
-            name: Animation(load_frames(os.path.join(SAMURAI_DIR, name), settings.SCALE),
-                            fps, loop=name != "attack")
-            for name, fps in settings.SAMURAI_ANIM_FPS.items()
+            name: Animation(load_frames(os.path.join(self.ASSET_DIR, name), settings.SCALE),
+                            fps, loop=name not in self.PLAY_ONCE)
+            for name, fps in self.ANIM_FPS.items()
         }
         self.anim_name = "idle"
         self.facing_right = random.choice((True, False))
@@ -56,7 +70,7 @@ class Enemy(PhysicsEntity):
         self.lose_timer = 0.0
         self.attack_landed = False
 
-        self.max_health = settings.SAMURAI_MAX_HEALTH
+        self.max_health = self.MAX_HEALTH
         self.health = self.max_health
         self.flash_timer = 0.0
         self.last_hit_by = -1          # id of the player swing that last hit us
@@ -75,24 +89,28 @@ class Enemy(PhysicsEntity):
                 p.hitbox.centery - self.hitbox.centery)
 
     def can_see_player(self):
-        """In range, roughly level, in front of him, and not behind terrain."""
+        """In range, roughly level, and not behind terrain.
+        (With ENEMY_SPOT_ONLY_IN_FRONT he must also be facing the ninja.)
+        Spotting turns him towards the ninja, so he then attacks from either side."""
         dx, dy = self.player_offset()
-        if abs(dx) > settings.SAMURAI_SIGHT_RANGE or abs(dy) > settings.SAMURAI_SIGHT_HEIGHT:
+        if abs(dx) > self.SIGHT_RANGE or abs(dy) > self.SIGHT_HEIGHT:
             return False
-        if dx != 0 and (dx > 0) != self.facing_right:
+        if settings.ENEMY_SPOT_ONLY_IN_FRONT and dx != 0 and (dx > 0) != self.facing_right:
             return False                      # the ninja is behind him
         return self.line_of_sight()
 
     def line_of_sight(self):
+        """Clear view from his eyes to the ninja's head OR body (seeing his head
+        over the edge of a ledge is enough)."""
         tm = self.game.tilemap
         eye = pygame.Vector2(self.hitbox.centerx, self.hitbox.top + 12)
-        target = pygame.Vector2(self.game.player.hitbox.center)
-        steps = max(1, int(eye.distance_to(target) // 16))
-        for i in range(1, steps):
-            x, y = eye.lerp(target, i / steps)
-            if tm.is_solid(*tm.world_to_grid(x, y)):
-                return False
-        return True
+        p = self.game.player.hitbox
+        for target in (pygame.Vector2(p.centerx, p.top + 8), pygame.Vector2(p.center)):
+            steps = max(1, int(eye.distance_to(target) // 16))
+            if not any(tm.is_solid(*tm.world_to_grid(*eye.lerp(target, i / steps)))
+                       for i in range(1, steps)):
+                return True
+        return False
 
     def drop_ahead(self):
         """How many tiles the ground drops just in front of him:
@@ -138,10 +156,11 @@ class Enemy(PhysicsEntity):
 
     def spot_player(self):
         self.face_player()
-        self.set_mode("alert", settings.SAMURAI_ALERT_TIME)
+        self.set_mode("alert", self.ALERT_TIME)
         self.lose_timer = 0.0
         self.game.camera.shake(*settings.SAMURAI_SPOT_SHAKE)
-        self.game.audio.play("enemy_attack")
+        if self.SPOT_SOUND:
+            self.game.audio.play(self.SPOT_SOUND)
 
     def start_attack(self):
         self.set_mode("attack")
@@ -149,22 +168,26 @@ class Enemy(PhysicsEntity):
         self.animations["attack"].reset()
         self.game.audio.play("attack")
 
+    def think_patrol(self):
+        """Shared by all enemy types: walk/idle around, look for the ninja."""
+        if self.can_see_player():
+            self.spot_player()
+        elif self.mode == "patrol_walk":
+            if self.mode_timer <= 0:
+                self.start_patrol_idle()
+            elif self.ledge_ahead():
+                self.facing_right = not self.facing_right
+        elif self.mode_timer <= 0:
+            if random.random() < 0.5:
+                self.facing_right = not self.facing_right
+            self.start_patrol_walk()
+
     def think(self, dt):
         self.mode_timer -= dt
         mode = self.mode
 
         if mode in ("patrol_walk", "patrol_idle"):
-            if self.can_see_player():
-                self.spot_player()
-            elif mode == "patrol_walk":
-                if self.mode_timer <= 0:
-                    self.start_patrol_idle()
-                elif self.ledge_ahead():
-                    self.facing_right = not self.facing_right
-            elif self.mode_timer <= 0:
-                if random.random() < 0.5:
-                    self.facing_right = not self.facing_right
-                self.start_patrol_walk()
+            self.think_patrol()
 
         elif mode == "alert":
             if self.mode_timer <= 0:
@@ -211,9 +234,9 @@ class Enemy(PhysicsEntity):
     # ------------------------------------------------------------ combat
     @property
     def attack_hitbox(self):
-        if self.mode != "attack" or self.animation.index not in settings.SAMURAI_ATTACK_ACTIVE_FRAMES:
+        if self.mode != "attack" or self.animation.index not in self.ATTACK_ACTIVE_FRAMES:
             return None
-        rect = pygame.Rect(0, 0, 12 * settings.SCALE, 16 * settings.SCALE)
+        rect = pygame.Rect(0, 0, self.BLADE_REACH * settings.SCALE, 16 * settings.SCALE)
         rect.bottom = self.hitbox.bottom
         if self.facing_right:
             rect.left = self.hitbox.centerx
@@ -224,6 +247,7 @@ class Enemy(PhysicsEntity):
     def take_damage(self, amount, source_x):
         self.health -= amount
         self.flash_timer = settings.HIT_FLASH_TIME
+        self.game.audio.play("hit_hurt")
         if self.health <= 0:
             self.die()
             return
@@ -241,8 +265,28 @@ class Enemy(PhysicsEntity):
     def check_hit(self):
         hb = self.attack_hitbox
         if hb and not self.attack_landed and hb.colliderect(self.game.player.hitbox):
-            if self.game.player.take_damage(settings.SAMURAI_DAMAGE, self.hitbox.centerx):
+            if self.game.player.take_damage(self.DAMAGE, self.hitbox.centerx):
                 self.attack_landed = True
+
+    def cutscene_animate(self, dt):
+        """During cutscenes: stand still and play the idle animation only."""
+        if self.anim_name != "idle":
+            self.anim_name = "idle"
+            self.animation.reset()
+        self.animation.update(dt)
+        self.image = self.animation.image
+        if not self.facing_right:
+            self.image = pygame.transform.flip(self.image, True, False)
+        self.align_image()
+
+    def stand_down_update(self):
+        """After the ninja is defeated: no AI, slide to a stop, land, stand idle."""
+        dt = self.game.dt
+        self.flash_timer = 0.0
+        self.vel.x *= math.exp(-8 * dt)
+        self.physics_update()
+        if self.alive():
+            self.cutscene_animate(dt)
 
     # ------------------------------------------------------------ update
     def update(self):
@@ -264,7 +308,7 @@ class Enemy(PhysicsEntity):
             elif self.mode == "chase" and self.on_ground:
                 self.vel.y = -settings.SAMURAI_JUMP_SPEED     # hop up the step
 
-        name = MODE_ANIM[self.mode]
+        name = self.MODE_ANIM[self.mode]
         if name != self.anim_name:
             self.anim_name = name
             self.animation.reset()

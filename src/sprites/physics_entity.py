@@ -80,6 +80,10 @@ class PhysicsEntity(pygame.sprite.Sprite):
         if self.hitbox.top > self.game.tilemap.height:
             self.on_fell_out_of_map()
 
+    def sync_hitbox(self):
+        """Move the hitbox to `pos` (after placing the entity by hand)."""
+        self.hitbox.midbottom = (round(self.pos.x), round(self.pos.y))
+
     def set_bottom(self, y):
         self.hitbox.bottom = y
         self.pos.y = y

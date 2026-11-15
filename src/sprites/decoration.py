@@ -71,6 +71,17 @@ class Prop(Decoration):
         super().__init__(game, [img], pos, group)
 
 
+class ExitGate(Prop):
+    """The level's exit: a torii gate. Walking through its opening finishes the level."""
+
+    def __init__(self, game: Game, pos):
+        super().__init__(game, "torii", pos)
+        # trigger = the opening between the pillars, at ground level
+        self.trigger = pygame.Rect(0, 0, 8 * settings.SCALE, 10 * settings.SCALE)
+        self.trigger.midbottom = self.rect.midbottom
+        game.exit_gate = self
+
+
 class Tree(Decoration):
     """Drawn BEHIND the player, gently swaying."""
 

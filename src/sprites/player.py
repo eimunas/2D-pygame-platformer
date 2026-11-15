@@ -10,8 +10,9 @@ import pygame
 
 from src import settings
 from src.sprites.animation import Animation, load_frames
-from src.sprites.effects import Afterimage, SlashStreak
+from src.sprites.effects import Afterimage, BloodDrop, BloodPool, SlashStreak, blood_spray
 from src.sprites.physics_entity import PhysicsEntity
+from src.sprites.projectile import Arrow
 
 if TYPE_CHECKING:  # only for type hints, avoids a circular import
     from src.game import Game
@@ -57,6 +58,12 @@ class Player(PhysicsEntity):
         self.lunge_speed = 0.0         # forward push during a swing
         self.attack_id = 0             # +1 per swing/dash, so each one hits an enemy once
 
+        # weapon: "katana" (LMB combo) or "bow" (LMB shoots) - switched with the mouse wheel
+        self.weapon = game.equipped_weapon()
+        self.shooting = False          # playing the bow animation
+        self.arrow_fired = False
+        self.bow_cooldown = 0.0
+
         # dash attack
         self.dash_attacking = False    # whole move: dash + finishing cut
         self.dash_timer = 0.0          # > 0 while actually dashing
@@ -70,6 +77,12 @@ class Player(PhysicsEntity):
         self.health = self.max_health
         self.invuln_timer = 0.0        # > 0: can't be hurt (blinking)
         self.hurt_timer = 0.0          # > 0: knocked back, no control
+
+        # death (see die / update_dead)
+        self.dead = False
+        self.drip_timer = 0.0
+        self.lying_time = 0.0          # seconds he's been lying on the ground
+        self.blood_pool = None
 
         self.image = self.animation.image
         self.align_image()
@@ -106,8 +119,12 @@ class Player(PhysicsEntity):
         if DASH_BUTTON in self.game.mouse_just_pressed and self.can_dash():
             self.start_dash()
 
+        # bow: left click shoots
+        if self.weapon == "bow":
+            if ATTACK_BUTTON in self.game.mouse_just_pressed and self.can_shoot():
+                self.start_shot()
         # katana combo
-        if ATTACK_BUTTON in self.game.mouse_just_pressed and not self.dash_attacking:
+        elif ATTACK_BUTTON in self.game.mouse_just_pressed and not self.dash_attacking:
             if not self.attacking:
                 n = len(settings.PLAYER_ATTACKS)
                 self.start_attack((self.combo_step + 1) % n if self.combo_timer > 0 else 0)
@@ -122,6 +139,8 @@ class Player(PhysicsEntity):
             else:  # finishing cut: drift forward and slow down
                 self.vel.x = facing * self.lunge_speed
                 self.lunge_speed *= math.exp(-settings.ATTACK_LUNGE_DECAY * self.game.dt)
+        elif self.shooting:
+            self.vel.x = 0                 # plant your feet to shoot (you still fall)
         elif self.attacking:
             # committed to the swing: no turning, lunge forward instead of walking
             facing = 1 if self.facing_right else -1
@@ -152,11 +171,13 @@ class Player(PhysicsEntity):
         self.coyote_timer = 0.0
         self.cancel_attack()           # jumping always takes priority
         self.cancel_dash()
+        self.cancel_shot()
 
     def double_jump(self):
         self.game.audio.play("jump")
         self.cancel_attack()
         self.cancel_dash()
+        self.cancel_shot()
         self.vel.y = -settings.DOUBLE_JUMP_SPEED
         self.air_jumps_left -= 1
         self.jump_buffer_timer = 0.0   # don't jump again automatically on landing
@@ -193,6 +214,36 @@ class Player(PhysicsEntity):
             self.lunge_speed = 0.0
             self.combo_timer = settings.COMBO_WINDOW
 
+    # ------------------------------------------------------------ bow
+    def can_shoot(self):
+        return not (self.shooting or self.dash_attacking) and self.bow_cooldown <= 0
+
+    def start_shot(self):
+        self.shooting = True
+        self.arrow_fired = False
+        self.flipping = False
+        self.state = "bow"
+        self.animation.reset()
+
+    def fire_arrow(self):
+        facing = 1 if self.facing_right else -1
+        start = (self.hitbox.centerx + facing * 5 * settings.SCALE, self.hitbox.top + 6 * settings.SCALE)
+        Arrow(self.game, start, (facing * settings.PLAYER_ARROW_SPEED, -settings.PLAYER_ARROW_LIFT),
+              damage=settings.PLAYER_ARROW_DAMAGE, friendly=True, gravity=settings.PLAYER_ARROW_GRAVITY)
+        self.arrow_fired = True
+        self.game.audio.play("arrow")
+
+    def cancel_shot(self):
+        self.shooting = False
+
+    def set_weapon(self, weapon_id):
+        """Switch weapons (from the weapon bar): stops whatever attack is going on."""
+        if weapon_id != self.weapon:
+            self.cancel_attack()
+            self.cancel_shot()
+            self.combo_timer = 0.0
+            self.weapon = weapon_id
+
     # ------------------------------------------------------------ dash attack
     def can_dash(self):
         return (not self.dash_attacking and self.dash_cooldown <= 0
@@ -200,6 +251,7 @@ class Player(PhysicsEntity):
 
     def start_dash(self):
         self.cancel_attack()
+        self.cancel_shot()
         self.flipping = False
         if not self.on_ground:
             self.air_dash_available = False
@@ -243,9 +295,12 @@ class Player(PhysicsEntity):
     def take_damage(self, amount, source_x):
         """Hurt the player. Returns True if the hit counted.
         Ignored while invulnerable or in the middle of a dash."""
-        if self.invuln_timer > 0 or self.dash_timer > 0:
+        if self.dead or self.invuln_timer > 0 or self.dash_timer > 0:
             return False
         self.health -= amount
+        self.cancel_shot()
+        # the killing blow gets its own, gorier sound
+        self.game.audio.play(settings.DEATH_SOUND if self.health <= 0 else "hit_hurt")
         self.cancel_attack()
         self.cancel_dash()
         self.flipping = False
@@ -256,14 +311,33 @@ class Player(PhysicsEntity):
         self.vel.update(away * kx, -ky)
         self.game.camera.shake(*settings.HURT_SHAKE)
         if self.health <= 0:
-            self.die()
+            self.die(source_x)
         return True
 
-    def die(self):
-        """For now: back to the spawn point with full health."""
-        self.health = self.max_health
+    def die(self, source_x):
+        """Killing blow: he turns to the attacker, staggers back bleeding and
+        slowly collapses (update_dead). The game shows the defeat screen."""
+        self.health = 0
+        self.dead = True
         self.hurt_timer = 0.0
-        self.respawn()
+        self.invuln_timer = 0.0
+        self.direction = 0
+        self.drop_through = False
+        self.facing_right = source_x > self.hitbox.centerx
+        away = -1 if self.facing_right else 1
+        self.vel.update(away * settings.DEATH_KNOCKBACK, min(self.vel.y, -180))
+        self.state = "death"
+        self.animation.reset()
+        blood_spray(self.game, self.chest_pos(), away)
+        self.game.camera.shake(*settings.DEATH_SHAKE)
+        self.game.on_player_death()
+
+    def chest_pos(self):
+        """Where the wound is: his chest while standing, further forward once he lies down."""
+        facing = 1 if self.facing_right else -1
+        if self.dead and self.animation.index >= 6:
+            return (self.hitbox.centerx + facing * 6 * settings.SCALE, self.hitbox.bottom - 2 * settings.SCALE)
+        return (self.hitbox.centerx + facing * settings.SCALE, self.hitbox.top + round(self.hitbox.height * 0.45))
 
     @property
     def current_damage(self):
@@ -313,6 +387,8 @@ class Player(PhysicsEntity):
     def choose_state(self):
         if self.dash_attacking:
             return "dash"
+        if self.shooting:
+            return "bow"
         if self.attacking:
             return self.state          # the current attack animation
         if self.flipping:
@@ -328,11 +404,15 @@ class Player(PhysicsEntity):
 
     # ------------------------------------------------------------ update
     def update(self):
+        if self.dead:
+            self.update_dead()
+            return
         dt = self.game.dt
         self.coyote_timer = settings.COYOTE_TIME if self.on_ground else max(0.0, self.coyote_timer - dt)
         self.jump_buffer_timer = max(0.0, self.jump_buffer_timer - dt)
         self.combo_timer = max(0.0, self.combo_timer - dt)
         self.dash_cooldown = max(0.0, self.dash_cooldown - dt)
+        self.bow_cooldown = max(0.0, self.bow_cooldown - dt)
         self.invuln_timer = max(0.0, self.invuln_timer - dt)
         self.hurt_timer = max(0.0, self.hurt_timer - dt)
 
@@ -353,6 +433,14 @@ class Player(PhysicsEntity):
         if self.attacking and self.animation.finished:
             self.finish_attack()
             self.set_state(self.choose_state())
+        if self.shooting:
+            bow = self.animations["bow"]
+            if not self.arrow_fired and bow.index >= settings.PLAYER_BOW_RELEASE_FRAME:
+                self.fire_arrow()
+            if bow.finished:
+                self.shooting = False
+                self.bow_cooldown = settings.PLAYER_BOW_COOLDOWN
+                self.set_state(self.choose_state())
         self.hit_enemies()       # before the attack may end, so last frames still count
         if self.dash_attacking and self.dash_timer <= 0 and self.animation.finished:
             self.dash_attacking = False
@@ -367,8 +455,51 @@ class Player(PhysicsEntity):
         self.align_image()
         self.spawn_afterimages(dt)
 
+    def update_dead(self):
+        """No control: slide to a stop, collapse (only once he's on the ground),
+        drip blood while falling, then a pool spreads under him."""
+        dt = self.game.dt
+        self.vel.x *= math.exp(-5 * dt)
+        self.physics_update()
+        if not self.dead:              # fell out of the map -> respawned
+            return
+        anim = self.animation
+        if self.on_ground or anim.index < 3:           # don't fall flat in mid-air
+            anim.update(dt)
+
+        if not anim.finished:
+            self.drip_timer -= dt
+            if self.drip_timer <= 0:
+                self.drip_timer = settings.BLOOD_DRIP_INTERVAL
+                facing = 1 if self.facing_right else -1
+                BloodDrop(self.game, self.chest_pos(), (facing * 30 + (self.vel.x * 0.5), -40))
+        elif self.on_ground:
+            self.lying_time += dt
+            if self.blood_pool is None:
+                self.blood_pool = BloodPool(self.game, self.chest_pos()[0], self.hitbox.bottom)
+
+        self.image = anim.image
+        if not self.facing_right:
+            self.image = pygame.transform.flip(self.image, True, False)
+        self.align_image()
+
+    def cutscene_animate(self, state, dt):
+        """Cutscene control: just play an animation - no input, no physics."""
+        self.sync_hitbox()
+        self.set_state(state)
+        self.animation.update(dt)
+        self.image = self.animation.image
+        if not self.facing_right:
+            self.image = pygame.transform.flip(self.image, True, False)
+        self.align_image()
+
     def on_fell_out_of_map(self):
-        """Respawn instead of disappearing."""
+        """Respawn instead of disappearing (a body falling into a pit also skips
+        straight to the defeat message)."""
+        if self.dead:
+            self.lying_time = settings.DEFEAT_MESSAGE_DELAY
+            self.vel.update(0, 0)
+            return
         self.respawn()
 
     def respawn(self):
@@ -378,4 +509,5 @@ class Player(PhysicsEntity):
         self.flipping = False
         self.cancel_attack()
         self.cancel_dash()
+        self.cancel_shot()
         self.game.camera.snap()
