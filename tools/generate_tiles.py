@@ -9,6 +9,9 @@ Output:
     assets/tiles/dirt/dirt_MM_V.png      16 autotile masks x 3 variants
     assets/decorations/rocks/{pebbles,boulder,cairn}.png
     assets/decorations/trees/{sakura,pine,bamboo}/<name>_00..05.png
+    assets/tiles/bridge/bridge_{left,mid,right,single}.png   16x32 (rails above the tile)
+    assets/decorations/props/{lantern,torii}.png
+    assets/decorations/plants/{bush,bush_small}.png
 
 Autotile mask: a bit is SET when that side is EXPOSED (neighbour is empty):
     N = 1, E = 2, S = 4, W = 8      e.g. 0 = fully surrounded, 15 = lone tile
@@ -331,6 +334,115 @@ def make_bamboo_frames():
     return frames
 
 
+# ================================================================== bridge
+WOOD = {"light": rgb(186, 134, 84), "main": rgb(146, 100, 60), "dark": rgb(102, 68, 44)}
+
+
+def make_bridge(piece):
+    """16x32: rails/posts in the top half, deck starting at y=16 (= tile top).
+    piece: left / mid / right / single."""
+    cv = Canvas(16, 32)
+    x0 = 1 if piece in ("left", "single") else 0
+    x1 = 14 if piece in ("right", "single") else 15
+    # deck planks
+    for x in range(16):
+        cv.set(x, 16, WOOD["light"])
+        cv.set(x, 17, WOOD["dark"] if x % 4 == 3 else WOOD["main"])
+        cv.set(x, 18, WOOD["dark"] if x % 4 == 3 else WOOD["main"])
+        cv.set(x, 19, WOOD["dark"])
+        if x % 8 in (2, 3):                       # cross beams under the deck
+            cv.set(x, 20, WOOD["dark"])
+            cv.set(x, 21, WOOD["dark"])
+    # hand rail + lower rail
+    for x in range(x0, x1 + 1):
+        cv.set(x, 7, WOOD["light"])
+        cv.set(x, 8, WOOD["main"])
+        cv.set(x, 12, WOOD["main"])
+    # posts
+    posts = {"left": [1], "right": [13], "single": [1, 13], "mid": [7]}[piece]
+    for px in posts:
+        cv.rect(px, 5, px + 1, 15, WOOD["main"])
+        cv.rect(px, 5, px, 15, WOOD["light"])
+        cv.rect(px, 4, px + 1, 4, WOOD["dark"])   # cap
+        if piece != "mid":                        # end posts go down into the ground
+            cv.rect(px, 16, px + 1, 23, WOOD["dark"])
+    cv.outline(OUT)
+    return cv
+
+
+# ================================================================== props
+def make_lantern():
+    """Stone toro lantern, 16x32."""
+    rnd = random.Random("lantern")
+    cv = Canvas(16, 32)
+
+    def stone(x, y, nx, ny):
+        light = -(nx * 0.6 + ny * 0.8) + rnd.uniform(-0.1, 0.1)
+        return STONE["hi"] if light > 0.35 else STONE["sh"] if light < -0.3 else STONE["mid"]
+
+    cv.rect(3, 28, 12, 30, STONE["mid"])                 # base
+    cv.rect(3, 28, 12, 28, STONE["hi"])
+    cv.rect(6, 19, 9, 27, STONE["mid"])                  # pole
+    cv.rect(6, 19, 6, 27, STONE["hi"])
+    cv.rect(4, 17, 11, 18, STONE["sh"])                  # platform under the light box
+    cv.rect(4, 11, 11, 16, STONE["mid"])                 # light box
+    cv.rect(6, 12, 9, 15, rgb(255, 214, 140))            # warm window
+    cv.rect(7, 13, 8, 14, rgb(255, 244, 200))
+    cv.ellipse(7.5, 9, 7, 2.2, stone)                    # roof
+    cv.set(0, 8, STONE["mid"])                           # upturned eaves
+    cv.set(15, 8, STONE["mid"])
+    cv.rect(6, 5, 9, 6, STONE["mid"])                    # finial
+    cv.rect(7, 3, 8, 4, STONE["hi"])
+    for x in range(4, 12):                               # a bit of moss on the base
+        if rnd.random() < 0.4:
+            cv.set(x, 28, STONE["moss"])
+    cv.outline(OUT)
+    return cv
+
+
+def make_bush(w, h, seed):
+    rnd = random.Random(seed)
+    cv = Canvas(w, h)
+    leaf = {"hi": rgb(110, 164, 98), "mid": rgb(66, 120, 78), "sh": rgb(40, 84, 60)}
+
+    def shade(x, y, nx, ny):
+        light = -(nx * 0.5 + ny * 0.85) + rnd.uniform(-0.25, 0.25)
+        return leaf["hi"] if light > 0.4 else leaf["sh"] if light < -0.25 else leaf["mid"]
+
+    n = 3 if w > 16 else 2
+    for i in range(n):
+        cx = (i + 0.5) * w / n + rnd.uniform(-1, 1)
+        rx = w / n * 0.75
+        ry = rnd.uniform(h * 0.32, h * 0.42)
+        cv.ellipse(cx, h - 1 - ry, rx, ry, shade)
+    for _ in range(w // 8):                              # a few tiny white flowers
+        x, y = rnd.randrange(2, w - 2), rnd.randrange(h // 3, h - 2)
+        if cv.get(x, y):
+            cv.set(x, y, GRASS["flower"])
+    cv.outline(OUT)
+    return cv
+
+
+def make_torii():
+    """Vermilion shrine gate, 40x40."""
+    cv = Canvas(40, 40)
+    red, red_sh = rgb(200, 62, 44), rgb(150, 40, 34)
+    black = rgb(44, 34, 36)
+    cv.rect(2, 4, 37, 6, black)                          # kasagi (top beam)
+    cv.rect(0, 3, 2, 4, black)                           # upturned ends
+    cv.rect(37, 3, 39, 4, black)
+    cv.rect(4, 7, 35, 8, red)                            # shimaki
+    cv.rect(18, 9, 21, 13, red)                          # gakuzuka (centre strut)
+    cv.rect(5, 14, 34, 15, red)                          # nuki (lower beam)
+    cv.rect(5, 15, 34, 15, red_sh)
+    for px in (8, 29):                                   # pillars
+        cv.rect(px, 9, px + 2, 35, red)
+        cv.rect(px + 2, 9, px + 2, 35, red_sh)
+        cv.rect(px - 1, 36, px + 3, 39, black)           # black base
+    cv.outline(OUT)
+    return cv
+
+
 # ================================================================== main
 def main():
     ap = argparse.ArgumentParser()
@@ -358,10 +470,25 @@ def main():
             cv.save(os.path.join(args.out, "decorations", "trees", name, f"{name}_{i:02d}.png"))
     print(f"trees: {', '.join(trees)} ({FRAMES} frames each)")
 
+    bridge = {p: make_bridge(p) for p in ("left", "mid", "right", "single")}
+    for p, cv in bridge.items():
+        cv.save(os.path.join(args.out, "tiles", "bridge", f"bridge_{p}.png"))
+    print("bridge: left, mid, right, single")
+
+    props = {"lantern": make_lantern(), "torii": make_torii()}
+    for name, cv in props.items():
+        cv.save(os.path.join(args.out, "decorations", "props", f"{name}.png"))
+    plants = {"bush": make_bush(24, 14, "bush"), "bush_small": make_bush(14, 10, "bush_small")}
+    for name, cv in plants.items():
+        cv.save(os.path.join(args.out, "decorations", "plants", f"{name}.png"))
+    print(f"props: {', '.join(props)} | plants: {', '.join(plants)}")
+
     if args.preview:
         rows = [[tiles[("grass", m, 0)] for m in range(16)],
                 [tiles[("dirt", m, 0)] for m in range(16)],
-                list(rocks.values())]
+                list(rocks.values()),
+                list(bridge.values()),
+                list(props.values()) + list(plants.values())]
         rows += [frames for frames in trees.values()]
         preview_sheet(args.preview, rows, scale=5)
         print(f"preview -> {args.preview}")

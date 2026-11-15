@@ -18,6 +18,15 @@ DECOR_DIR = os.path.join(settings.ASSETS_DIR, "decorations")
 ROCK_KINDS = ("pebbles", "boulder", "cairn")
 TREE_KINDS = ("sakura", "pine", "bamboo")
 
+# other static props: name -> (image inside assets/decorations, layer)
+#   "back"  = drawn behind the player, "front" = drawn in front of the player
+PROPS = {
+    "lantern": ("props/lantern.png", "back"),
+    "torii": ("props/torii.png", "back"),
+    "bush": ("plants/bush.png", "front"),
+    "bush_small": ("plants/bush_small.png", "front"),
+}
+
 
 class Decoration(pygame.sprite.Sprite):
     """A static or looping-animated image placed by its midbottom (feet) point."""
@@ -48,6 +57,18 @@ class Rock(Decoration):
             raise ValueError(f"Unknown rock '{kind}', expected one of {ROCK_KINDS}")
         img = load_image(os.path.join(DECOR_DIR, "rocks", f"{kind}.png"), settings.SCALE)
         super().__init__(game, [img], pos, game.foreground_decor)
+
+
+class Prop(Decoration):
+    """Any static prop listed in PROPS (lantern, torii, bushes, ...)."""
+
+    def __init__(self, game: Game, kind, pos):
+        if kind not in PROPS:
+            raise ValueError(f"Unknown prop '{kind}', expected one of {tuple(PROPS)}")
+        path, layer = PROPS[kind]
+        img = load_image(os.path.join(DECOR_DIR, path), settings.SCALE)
+        group = game.background_decor if layer == "back" else game.foreground_decor
+        super().__init__(game, [img], pos, group)
 
 
 class Tree(Decoration):
