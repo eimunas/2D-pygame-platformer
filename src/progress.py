@@ -6,6 +6,7 @@ cleared stages, coins (wallet + which coins were already found) and items bought
     progress.mark_cleared(0)      # saves right away
     progress.collect_coin("Shrine Hill#0")     # +1 coin; that coin never appears again
     progress.buy("bow", 3)        # spend coins, add the item
+    progress.use_item("bomb")     # a thrown bomb is gone
 
 Stages are remembered by name, so reordering LEVELS doesn't mix them up.
 A missing or broken save file simply means "nothing cleared yet".
@@ -83,6 +84,16 @@ class Progress:
         self.inventory[item_id] = self.item_count(item_id) + 1
         self.save()
         return True
+
+    def use_item(self, item_id):
+        """Use up one of an item (e.g. a thrown bomb). Returns how many are left."""
+        left = max(0, self.item_count(item_id) - 1)
+        if left:
+            self.inventory[item_id] = left
+        else:
+            self.inventory.pop(item_id, None)
+        self.save()
+        return left
 
     def equip(self, weapon_id):
         if weapon_id != self.equipped:

@@ -3,6 +3,7 @@
 Usage (from the repo root):
     python tools/generate_background.py
     python tools/generate_background.py --preview preview.png
+    python tools/generate_background.py --theme evening     # -> assets/background/evening/
 
 Output (each 480x300, drawn at 2x in game, tiles seamlessly left/right):
     assets/background/sky.png           opaque gradient, pale sun, cloud streaks
@@ -14,6 +15,12 @@ Output (each 480x300, drawn at 2x in game, tiles seamlessly left/right):
 Palette idea: cool, desaturated blue-grey/teal that gets paler with distance
 (atmospheric perspective), so the saturated green grass, brown dirt and the
 dark navy ninja always stand out in front of it.
+
+The "night" theme: deep blue sky with stars and a moon, cold blue-grey
+silhouettes and faint moonbeams.
+The "evening" theme reuses the same shapes with a sunset palette: indigo sky
+fading to an orange horizon, a big low sun sinking behind the ridges, and
+dusky purple silhouettes that get warmer (hazier) with distance.
 """
 
 import argparse
@@ -24,7 +31,40 @@ import random
 from pixelart import Canvas, rgb, write_png
 
 W, H = 480, 300
-MIST = (222, 230, 226)
+
+THEMES = {
+    "day": {
+        "sky_top": (166, 190, 204), "sky_mid": None, "sky_horizon": (232, 234, 224),
+        "sun": (250, 246, 228), "sun_glow": (244, 240, 222), "sun_pos": (300, 96, 22),
+        "cloud": (240, 242, 236),
+        "mist": (222, 230, 226),
+        "ridge_far": (178, 196, 204), "ridge_near": (160, 180, 190), "pagoda": (142, 162, 174),
+        "forest_far": (140, 166, 176), "forest_mid": (116, 144, 156),
+        "trunk": (96, 122, 134), "trunk_hi": (110, 136, 148), "canopy": (90, 116, 128),
+        "rays": (250, 246, 222), "ray_alpha": 42,
+    },
+    "evening": {
+        "sky_top": (58, 50, 104), "sky_mid": (168, 92, 128), "sky_horizon": (246, 162, 96),
+        "sun": (255, 214, 140), "sun_glow": (250, 150, 92), "sun_pos": (300, 158, 30),
+        "cloud": (240, 134, 120),
+        "mist": (214, 128, 112),
+        "ridge_far": (148, 92, 124), "ridge_near": (118, 74, 112), "pagoda": (98, 62, 98),
+        "forest_far": (92, 62, 100), "forest_mid": (70, 48, 84),
+        "trunk": (48, 36, 64), "trunk_hi": (78, 50, 74), "canopy": (42, 32, 58),
+        "rays": (255, 176, 110), "ray_alpha": 36,
+    },
+    "night": {
+        "sky_top": (12, 16, 40), "sky_mid": (28, 38, 78), "sky_horizon": (66, 80, 122),
+        "sun": (240, 240, 218), "sun_glow": (96, 112, 156), "sun_pos": (340, 64, 16),   # the moon
+        "cloud": (58, 70, 110), "stars": 140,
+        "mist": (56, 68, 104),
+        "ridge_far": (44, 54, 88), "ridge_near": (36, 44, 74), "pagoda": (28, 34, 60),
+        "forest_far": (30, 38, 64), "forest_mid": (22, 28, 50),
+        "trunk": (18, 22, 40), "trunk_hi": (34, 42, 70), "canopy": (16, 20, 36),
+        "rays": (190, 210, 255), "ray_alpha": 16,
+    },
+}
+P = THEMES["day"]          # current palette (set in main)
 BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 
 
@@ -58,30 +98,48 @@ def wrap_dx(x, cx):
 def fogged(color, fog_start, fog_len, fog_max):
     """Colour function that fades `color` into mist towards the bottom."""
     def fn(x, y):
-        return ramp(color, MIST, (y - fog_start) / fog_len * fog_max, x, y, steps=5)
+        return ramp(color, P["mist"], (y - fog_start) / fog_len * fog_max, x, y, steps=5)
     return fn
 
 
 # ---------------------------------------------------------------- layers
 def make_sky():
     cv = Canvas(W, H)
-    top, horizon = (166, 190, 204), (232, 234, 224)
+    top, mid, horizon = P["sky_top"], P["sky_mid"], P["sky_horizon"]
     for y in range(H):
         for x in range(W):
-            cv.set(x, y, ramp(top, horizon, y / 215, x, y, steps=6))
+            t = y / 215
+            if mid is None:
+                c = ramp(top, horizon, t, x, y, steps=6)
+            elif t < 0.5:
+                c = ramp(top, mid, t * 2, x, y, steps=4)
+            else:
+                c = ramp(mid, horizon, t * 2 - 1, x, y, steps=4)
+            cv.set(x, y, c)
 
-    # pale sun with a dithered glow
-    sx, sy, r = 300, 96, 22
-    for y in range(sy - 50, sy + 51):
-        for x in range(sx - 50, sx + 51):
+    # stars (night only): single pixels, a few brighter crosses, fewer near the horizon
+    rnd_stars = random.Random("stars")
+    for _ in range(P.get("stars", 0)):
+        x, y = rnd_stars.randrange(W), int(rnd_stars.random() ** 1.6 * 170)
+        bright = rnd_stars.random()
+        cv.set(x, y, rgb(*lerp(top, (255, 255, 240), 0.5 + 0.5 * bright)))
+        if bright > 0.93:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                cv.set((x + dx) % W, y + dy, rgb(*lerp(top, (220, 226, 255), 0.55)))
+
+    # sun (or moon) with a dithered glow
+    sx, sy, r = P["sun_pos"]
+    glow = r + 26
+    for y in range(sy - glow - 4, sy + glow + 5):
+        for x in range(sx - glow - 4, sx + glow + 5):
             d = math.hypot(x - sx, y - sy)
             if d <= r:
-                cv.set(x, y, rgb(250, 246, 228))
-            elif d <= r + 26:
+                cv.set(x, y, rgb(*P["sun"]))
+            elif d <= glow:
                 base = cv.get(x % W, y)
                 if base:
                     t = 1 - (d - r) / 26
-                    cv.set(x, y, ramp(base[:3], (244, 240, 222), t * 0.8, x, y, steps=3))
+                    cv.set(x, y, ramp(base[:3], P["sun_glow"], t * 0.8, x, y, steps=3))
 
     # long horizontal cloud streaks
     rnd = random.Random("clouds")
@@ -95,7 +153,7 @@ def make_sky():
             half = thick * (1 - dx * dx)
             for y in range(int(cy - half), int(cy + half) + 1):
                 if BAYER[y % 4][x % 4] < 13 or abs(y - cy) < half - 1:
-                    cv.set(x, y, rgb(240, 242, 236))
+                    cv.set(x, y, rgb(*P["cloud"]))
     return cv
 
 
@@ -103,19 +161,19 @@ def make_mountains():
     cv = Canvas(W, H)
     ranges = [
         # base y, sine terms, colour, fog
-        (150, [(30, 1, 0.3), (14, 3, 1.1), (6, 7, 2.0)], (178, 196, 204)),
-        (178, [(22, 2, 2.2), (10, 5, 0.4), (5, 11, 1.3)], (160, 180, 190)),
+        (150, [(30, 1, 0.3), (14, 3, 1.1), (6, 7, 2.0)], P["ridge_far"]),
+        (178, [(22, 2, 2.2), (10, 5, 0.4), (5, 11, 1.3)], P["ridge_near"]),
     ]
     for base, terms, color in ranges:
         for x in range(W):
             top = round(base + periodic(x, terms))
             for y in range(top, H):
-                cv.set(x, y, ramp(color, MIST, (y - top) / 90 * 0.75, x, y, steps=4))
+                cv.set(x, y, ramp(color, P["mist"], (y - top) / 90 * 0.75, x, y, steps=4))
 
     # pagoda on the near ridge
     px = 110
     base_y = round(178 + periodic(px, ranges[1][1])) + 3
-    col = rgb(142, 162, 174)
+    col = rgb(*P["pagoda"])
     y = base_y
     for body_w, roof_w in ((12, 24), (10, 20), (8, 16)):
         cv.rect(px - body_w // 2, y - 6, px + body_w // 2, y, col)      # walls
@@ -160,8 +218,8 @@ def make_forest(seed, n, h_range, base_line, color, fog_start, fog_len, fog_max)
 def make_near():
     rnd = random.Random("near")
     cv = Canvas(W, H)
-    trunk, trunk_hi = (96, 122, 134), (110, 136, 148)
-    canopy = (90, 116, 128)
+    trunk, trunk_hi = P["trunk"], P["trunk_hi"]
+    canopy = P["canopy"]
     trunk_fn = fogged(trunk, 190, 110, 0.8)
 
     # tall straight cedar trunks, full height
@@ -173,7 +231,7 @@ def make_near():
                 x = int(cx + dx) % W
                 c = trunk_fn(x, y)
                 if dx == 1 or (dx == 2 and y % 9 < 5):          # lit edge + bark marks
-                    c = ramp(trunk_hi, MIST, (y - 190) / 110 * 0.8, x, y, steps=5)
+                    c = ramp(trunk_hi, P["mist"], (y - 190) / 110 * 0.8, x, y, steps=5)
                 cv.set(x, y, c)
         # a couple of short branch stubs
         for by in (rnd.randrange(40, 70), rnd.randrange(80, 120)):
@@ -197,9 +255,9 @@ def make_near():
     for y in range(H):
         for x in range(W):
             if cv.get(x, y) is None and (x + y * 0.6) % 160 < 16 and y > 10:
-                alpha = round(42 * (1 - y / H))
+                alpha = round(P["ray_alpha"] * (1 - y / H))
                 if alpha > 4 and BAYER[y % 4][x % 4] < 12:
-                    cv.set(x, y, rgb(250, 246, 222, alpha))
+                    cv.set(x, y, rgb(*P["rays"], alpha))
     return cv
 
 
@@ -224,15 +282,24 @@ def composite(layers, offsets):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=os.path.join("assets", "background"))
+    ap.add_argument("--theme", choices=sorted(THEMES), default="day")
+    ap.add_argument("--out", help="output folder (default: assets/background, "
+                                  "or assets/background/<theme> for other themes)")
     ap.add_argument("--preview", help="write a 2x composited preview to this path")
     args = ap.parse_args()
+    global P
+    P = THEMES[args.theme]
+    if args.out is None:
+        args.out = os.path.join("assets", "background")
+        if args.theme != "day":
+            args.out = os.path.join(args.out, args.theme)
+    os.makedirs(args.out, exist_ok=True)
 
     layers = {
         "sky": make_sky(),
         "mountains": make_mountains(),
-        "forest_far": make_forest("far", 22, (40, 76), 228, (140, 166, 176), 185, 70, 0.8),
-        "forest_mid": make_forest("mid", 9, (80, 132), 238, (116, 144, 156), 200, 80, 0.75),
+        "forest_far": make_forest("far", 22, (40, 76), 228, P["forest_far"], 185, 70, 0.8),
+        "forest_mid": make_forest("mid", 9, (80, 132), 238, P["forest_mid"], 200, 80, 0.75),
         "forest_near": make_near(),
     }
     for name, cv in layers.items():

@@ -7,7 +7,8 @@ Modes (patrol + hurt behave like the swordsman's, see enemy.py):
     aim     -> faces the ninja; shoots when the cooldown is over;
                backs away if the ninja is too close; gives up if he's far away
     shoot   -> draw + release; the arrow leaves on the release frame
-    retreat -> walks away from the ninja for a moment (not off ledges) -> aim
+    retreat -> walks away from the ninja for a moment (not off ledges; jumps
+               over a pit if he can reach the other side) -> aim
     hurt    -> knocked back, then aim again
 """
 
@@ -65,7 +66,7 @@ class Archer(Enemy):
     def try_retreat(self):
         """Turn away and back off - unless that would walk off a ledge."""
         self.facing_right = not self.facing_right
-        if self.ledge_ahead():
+        if self.ledge_ahead() and not self.try_leap(toward_player=False):
             self.face_player()
             return False
         self.set_mode("retreat", settings.ARCHER_RETREAT_TIME)
@@ -96,7 +97,11 @@ class Archer(Enemy):
                 self.start_shoot()
 
         elif mode == "retreat":
-            if (self.mode_timer <= 0 or abs(dx) >= 1.3 * settings.ARCHER_KEEP_DISTANCE
+            if self.leaping:
+                pass                           # mid-jump over a pit: keep going
+            elif self.ledge_ahead() and self.try_leap(toward_player=False):
+                pass
+            elif (self.mode_timer <= 0 or abs(dx) >= 1.3 * settings.ARCHER_KEEP_DISTANCE
                     or self.ledge_ahead()):
                 self.face_player()
                 self.set_mode("aim", 0.25)
@@ -121,5 +126,7 @@ class Archer(Enemy):
         if self.mode == "patrol_walk":
             return facing * settings.SAMURAI_WALK_SPEED
         if self.mode == "retreat":
+            if self.leaping:
+                return facing * self.LEAP_RUN_SPEED
             return facing * settings.SAMURAI_WALK_SPEED * 1.5
         return 0

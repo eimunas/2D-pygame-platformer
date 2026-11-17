@@ -105,7 +105,10 @@ SAMURAI_HITBOX = PLAYER_HITBOX
 SAMURAI_WALK_SPEED = 60
 SAMURAI_RUN_SPEED = 210                    # a bit slower than the ninja's run
 SAMURAI_JUMP_SPEED = 760                   # used to hop up 1-tile steps while chasing
-SAMURAI_MAX_STEP_DOWN = 2                  # tiles he'll drop down while chasing (deeper = stop)
+SAMURAI_MAX_STEP_DOWN = 2                  # tiles he'll drop down while chasing (deeper = jump or stop)
+SAMURAI_LEAP_SPEED = 820                   # jumps over pits while chasing (archers too, when backing off)
+SAMURAI_LEAP_RUN_SPEED = 320               # forward speed during that jump (clears 3-tile pits)
+ENEMY_MAX_LEAP_TILES = 4                   # how far past a pit's edge enemies look for ground to land on
 SAMURAI_SIGHT_RANGE = 6 * TILE_SIZE        # how far ahead he can spot the ninja
 SAMURAI_SIGHT_HEIGHT = 2 * TILE_SIZE       # max height difference to notice him
 SAMURAI_LOSE_RANGE = 10 * TILE_SIZE        # beyond this (for a while) he gives up
@@ -169,31 +172,82 @@ SHINOBI_DASH_DAMAGE = 1
 SHINOBI_DASH_RECOVER_TIME = 0.5            # stands still after a dash: your chance to hit back
 SHINOBI_GHOST_COLOR = (132, 64, 168)       # purple afterimages
 SHINOBI_JUMP_SPEED = 860                   # leaps over pits while chasing (same as your jump)
-SHINOBI_MAX_JUMP_TILES = 4                 # how far ahead he looks for ground to land on
+SHINOBI_LEAP_RUN_SPEED = 340               # forward speed during the leap
+
+# ---------------------------------------------------------------- mini-boss: stone golem
+# Guards the ancient caves (stage "Golem's Gate"). A rune seal (level char S) blocks
+# the arena until every other enemy is defeated; walking past it plays the boss
+# cutscene (the golem drops from the sky onto B) and the seal closes behind you.
+GOLEM_ANIM_FPS = {"idle": 5, "walk": 8, "attack": 10, "crouch": 6, "air": 6, "land": 10}
+GOLEM_HITBOX = (22 * SCALE, 42 * SCALE)
+GOLEM_MAX_HEALTH = 50                      # katana 1-2, dash 2, arrow 2, bomb 5
+GOLEM_WALK_SPEED = 70                      # slow...
+GOLEM_ATTACK_RANGE = 1 * TILE_SIZE         # gap (px) between bodies to start a fist slam
+GOLEM_ATTACK_ACTIVE_FRAMES = (3, 4)        # "attack" frames where the fists hurt
+GOLEM_FIST_REACH = 28                      # art px in front of his centre the slam covers
+GOLEM_FIST_DAMAGE = 2                      # ...but it hits hard (you have 5 HP)
+GOLEM_ATTACK_COOLDOWN = 0.9
+GOLEM_SLAM_SHAKE = (6, 0.25)               # fists hitting the ground
+GOLEM_JUMP_COOLDOWN = 8.0                  # seconds between jump attacks
+GOLEM_FIRST_JUMP_DELAY = 5.0               # after the fight starts
+GOLEM_CROUCH_TIME = 0.5                    # gathers himself before jumping: your warning
+GOLEM_JUMP_SPEED = 1250                    # take-off speed (px/s up) -> ~5.5 tiles high
+GOLEM_JUMP_MAX_SPEED_X = 700               # how far he can travel during the jump
+GOLEM_LANDING_DAMAGE = 3                   # caught under him or in the shockwave
+GOLEM_SHOCKWAVE = 1.4 * TILE_SIZE          # reach of the shockwave past his body (on the ground)
+GOLEM_LAND_SHAKE = (16, 0.6)
+GOLEM_LAND_RECOVER = 1.0                   # stands still after landing: punish him!
+GOLEM_STEP_SHAKE = (2, 0.12)               # every footstep
+GOLEM_LEASH = 14 * TILE_SIZE               # never walks/jumps further than this from where he landed
+GOLEM_DEATH_SHAKE = (18, 1.0)
+GOLEM_NAME = "Stone Golem"
+GOLEM_TITLE = "Guardian of the Ancient Caves"
+
+BOSS_TRIGGER_DISTANCE = 1.5 * TILE_SIZE    # walk this far past the seal -> boss cutscene
+BOSS_FIGHT_HEAL = True                     # the ninja starts the fight at full health
+BOSS_MUSIC = "giant-boss-fight-bg-music"   # loops during the fight (after the cutscene)
+BOSS_SPAWN_HEIGHT = 9 * TILE_SIZE          # the golem falls from this far above his landing spot
+BOSS_FALL_SPEED = 1500                     # px/s at the start of his fall (accelerates)
+BOSS_CUTSCENE_SOUND = "cutscene_giant_sound"
+BOSS_CUTSCENE_LAND_SOUND = "cutscene_giant_fall_on_ground_sound"
+BOSS_FOOTSTEP_SOUND = "giant_footstep"
+BOSS_LAUGH_SOUND = "giant_laugh"
+BOSS_LAUGH_INTERVAL = (10.0, 15.0)         # random seconds between laughs during the fight
+BOSS_CUTSCENE_SHAKE = (18, 0.9)
+BOSS_SEAL_COLOR = (120, 220, 255)
+BOSS_SEAL_HEIGHT = 5 * TILE_SIZE
+
+# night levels: a dark blue veil over the world (the background has its own night art)
+NIGHT_TINT = (8, 12, 40, 95)
 
 # ---------------------------------------------------------------- coins & shop
-# Coins are rare: each stage hides LEVELS[i]["coins"] of them (1 in each of the
-# first three stages) at a random spot, and each can only be collected ONCE
-# (remembered in the save file) - so a full run earns exactly enough for a bow.
+# Coins are rare: each stage hides LEVELS[i]["coins"] of them (1 in every
+# stage) at a random spot, and each can only be collected ONCE
+# (remembered in the save file) - so a full run earns 5: a bow plus 2 bombs.
 COIN_ANIM_FPS = 10
 COIN_BOB = (6, 2.2)                        # (pixels, speed) of the floating bob
 COIN_SAFE_FROM_SPAWN = 8                   # tiles: no coin right next to the start...
 COIN_SAFE_FROM_EXIT = 3                    # ...or the exit gate
 TRADER_TALK_RANGE = (1.6 * TILE_SIZE, TILE_SIZE)   # (sideways, up/down) to press E
 SHOP_ITEMS = [
-    # id = icon file in assets/items/ and the inventory key; unique = can only own one
+    # id = icon file in assets/items/ and the inventory key; unique = can only own one;
+    # held = what the trader says if you try to buy a unique item you already have
     {"id": "bow", "name": "Bow", "price": 3, "unique": True,
      "desc": "Strike from afar, like the archers do."},
-    {"id": "bomb", "name": "Bomb", "price": 1, "unique": False,
-     "desc": "A throwable horoku. Light it and run."},
+    # bomb: you carry one at a time; once it's thrown you can buy a new one
+    {"id": "bomb", "name": "Bomb", "price": 1, "unique": True,
+     "desc": "Throw it to blast every enemy nearby. Light it and run.",
+     "held": "One bomb at a time - throw that one first!"},
 ]
 
 # ---------------------------------------------------------------- weapons
 # Mouse wheel scrolls through the weapons (a bar pops up); landing on one equips it.
 # "item" = what you must own (bought from the trader); None = always available.
+# "consumable" = using it uses up the item (then you're back on the katana).
 WEAPONS = [
     {"id": "katana", "name": "Katana", "item": None},
     {"id": "bow", "name": "Bow", "item": "bow"},
+    {"id": "bomb", "name": "Bomb", "item": "bomb", "consumable": True},
 ]
 WEAPON_BAR_TIME = 1.4                      # seconds the bar stays after the last scroll
 PLAYER_BOW_RELEASE_FRAME = 4               # "bow" animation frame that looses the arrow
@@ -202,6 +256,21 @@ PLAYER_ARROW_SPEED = 900                   # px/s - much faster and flatter than
 PLAYER_ARROW_LIFT = 60                     # small upward kick so long shots arc a little
 PLAYER_ARROW_GRAVITY = 450
 PLAYER_ARROW_DAMAGE = 2
+
+# Bomb (weapon slot 3, LMB throws it - one use, buy another from the trader)
+BOMB_THROW_SPEED = (430, 520)              # (forward, upward) px/s; plus a bit of your run speed
+BOMB_FUSE = 1.3                            # seconds until it blows (touching an enemy blows it early)
+BOMB_RADIUS = 2.2 * TILE_SIZE              # blast reach (px) - every enemy inside gets hit
+BOMB_DAMAGE = 5                            # archer 3 HP, shinobi 6, samurai 10
+BOMB_PLAYER_DAMAGE = 1                     # if YOU stand in the blast too (0 = harmless to you)
+BOMB_HITBOX = 5 * SCALE
+BOMB_IMAGE_SCALE = 2                       # the 16 px item icon, drawn at half the sprites' scale
+BOMB_BOUNCE = 0.35                         # keeps this much of its falling speed when bouncing
+BOMB_MIN_BOUNCE = 160                      # slower landings just stop
+BOMB_GROUND_FRICTION = 6.0                 # rolling slows down (higher = stops sooner)
+BOMB_THROW_COOLDOWN = 0.35
+BOMB_SHAKE = (10, 0.35)
+BOMB_EXPLOSION_TIME = 0.7                  # seconds the blast + smoke effect lasts
 
 # ---------------------------------------------------------------- health bars
 HEALTH_FILL = (204, 52, 58)
@@ -223,6 +292,14 @@ BACKGROUND_LAYERS = [
     ("background/forest_mid.png", (0.4, 0.4)),
     ("background/forest_near.png", (0.65, 0.6)),
 ]
+# Background themes: name -> folder inside assets/ holding the same five layer
+# files. A level picks one with LEVELS[i]["background"] (default "day"; the
+# menu always uses "day"). Make new ones with tools/generate_background.py --theme.
+BACKGROUND_THEMES = {
+    "day": "background",
+    "evening": "background/evening",
+    "night": "background/night",
+}
 
 # ---------------------------------------------------------------- audio
 MASTER_VOLUME = 0.6            # 0..1, applies to every sound
@@ -231,15 +308,21 @@ SOUND_VOLUMES = {              # per-sound volume (file name without extension)
     "jump": 0.8,
     "dash_attack": 1.0,
     "enemy_attack": 0.8,       # samurai spots the ninja
+    "shinobi_spot": 0.5,       # shinobi spots the ninja (quiet dagger draw)
     "hit_hurt": 0.9,           # ninja or enemy takes damage
     "arrow": 0.7,              # archer looses an arrow
     "intro_scene_sound": 0.7,  # intro cutscene
     "player_blood_splash": 1.0,  # ninja's killing blow
     "defeat_sound": 0.7,       # after he dies (plays once)
+    "explosion": 0.9,          # the ninja's bomb
+    "cutscene_giant_sound": 1.0,                  # the golem lands (boss cutscene)
+    "cutscene_giant_fall_on_ground_sound": 1.0,   # ...the ground impact (also his jump attack)
+    "giant_footstep": 0.75,                       # every golem step
+    "giant_laugh": 1.0,                           # the golem laughs now and then during the fight
 }
 
 # Background music is streamed from disk (not preloaded like the effects above).
-MUSIC_FILES = {"level_bg_music", "main_menu"}   # files in assets/audio that are music, not effects
+MUSIC_FILES = {"level_bg_music", "main_menu", "giant-boss-fight-bg-music"}   # files in assets/audio that are music, not effects
 LEVEL_MUSIC = "level_bg_music"      # loops during gameplay on every stage
 MUSIC_VOLUME = 0.3                  # x MASTER_VOLUME - quiet, so it stays in the background
 MUSIC_FADE_IN_MS = 1500             # when gameplay starts (after the intro)

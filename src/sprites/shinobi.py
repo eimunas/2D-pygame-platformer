@@ -3,15 +3,15 @@ fast, stabs with a dagger up close, and every few seconds dashes straight at you
 
 Modes (patrol + hurt behave like the samurai's, see enemy.py):
     patrol_walk / patrol_idle -> looks for the ninja
-    alert   -> spotted: tiny pause (he reacts fast), silent -> chase
+    alert   -> spotted: tiny pause (he reacts fast), quiet dagger-draw sound -> chase
     chase   -> sprints at the ninja; stabs when close; when the dash is ready
                and the ninja is 1-5 tiles away on the same level -> windup;
-               at the edge of a pit he LEAPS across if he can reach the other
-               side (otherwise he waits at the edge like the samurai)
+               at the edge of a pit he LEAPS across (like the samurai, see
+               enemy.py, but with a stronger, longer jump)
     attack  -> quick dagger stab (hurts on the active frames) -> recover
     windup  -> crouches, dagger drawn back: the warning - jump or dodge now!
     dash    -> shoots forward with purple afterimages; hurts the ninja on
-               contact (once); stops at walls, deep drops, after a hit or
+               contact (once); immune to your blade and arrows meanwhile; stops at walls, deep drops, after a hit or
                after SHINOBI_DASH_TIME -> recover
     recover -> short pause (longer after a dash: your chance to strike) -> chase
 """
@@ -44,18 +44,23 @@ class Shinobi(Enemy):
     MAX_HEALTH = settings.SHINOBI_MAX_HEALTH
     SIGHT_RANGE = settings.SHINOBI_SIGHT_RANGE
     SIGHT_HEIGHT = settings.SHINOBI_SIGHT_HEIGHT
-    SPOT_SOUND = None                          # a ninja doesn't shout
+    SPOT_SOUND = "shinobi_spot"                # no shout - just a quiet dagger draw
     ALERT_TIME = settings.SHINOBI_ALERT_TIME
     ATTACK_ACTIVE_FRAMES = settings.SHINOBI_ATTACK_ACTIVE_FRAMES
     BLADE_REACH = settings.SHINOBI_DAGGER_REACH
     DAMAGE = settings.SHINOBI_DAMAGE
+    LEAP_SPEED = settings.SHINOBI_JUMP_SPEED
+    LEAP_RUN_SPEED = settings.SHINOBI_LEAP_RUN_SPEED
 
     def __init__(self, game: Game, pos):
         super().__init__(game, pos)
         self.dash_cooldown = 0.0
         self.dash_hit = False                  # already hurt the ninja this dash
         self.ghost_timer = 0.0
-        self.leaping = False                   # in the air, jumping over a pit
+
+    @property
+    def invulnerable(self):
+        return self.mode == "dash"             # too fast to hit while dashing
 
     # ------------------------------------------------------------ helpers
     def gap_to_player(self):
@@ -69,49 +74,6 @@ class Shinobi(Enemy):
                 and abs(dy) < self.hitbox.height
                 and not self.dangerous_drop_ahead()
                 and self.line_of_sight())
-
-    def landing_ahead(self):
-        """If there's a pit right in front of him: the gap (px) to the first ground
-        on the other side within SHINOBI_MAX_JUMP_TILES, and how much higher (px)
-        it is; None if there's no such ground or he couldn't reach it."""
-        tm, ts = self.game.tilemap, self.game.tilemap.tile_size
-        facing = 1 if self.facing_right else -1
-        front = self.hitbox.right if self.facing_right else self.hitbox.left
-        _, feet_row = tm.world_to_grid(self.hitbox.centerx, self.hitbox.bottom + 1)
-        col0, _ = tm.world_to_grid(front + facing * 2, self.hitbox.bottom + 1)
-        for d in range(1, settings.SHINOBI_MAX_JUMP_TILES + 1):
-            col = col0 + facing * d
-            if not tm.in_bounds(col, feet_row):
-                return None
-            for row in range(feet_row - 1, feet_row + 3):          # 1 up .. 2 down
-                surface = tm.is_solid(col, row) or tm.get_tile(col, row) == "bridge"
-                if surface and not tm.is_solid(col, row - 1) and not tm.is_solid(col, row - 2):
-                    edge = col * ts if facing > 0 else (col + 1) * ts
-                    gap = abs(edge - front)
-                    rise = (feet_row - row) * ts
-                    return (gap, rise) if self.can_reach(gap, rise) else None
-        return None
-
-    def can_reach(self, gap, rise):
-        """Ballistics: does a running jump carry him `gap` px forward (plus half
-        his body, to land safely) onto ground `rise` px higher (negative = lower)?"""
-        v, g = settings.SHINOBI_JUMP_SPEED, self.gravity
-        if v * v < 2 * g * rise:
-            return False                       # can't even jump that high
-        airtime = (v + math.sqrt(v * v - 2 * g * rise)) / g
-        return settings.SHINOBI_RUN_SPEED * airtime >= gap + self.hitbox.width / 2
-
-    def try_leap(self):
-        """At a pit's edge while chasing: jump over it if the ninja is across it."""
-        if not self.on_ground or not self.dangerous_drop_ahead():
-            return False
-        landing = self.landing_ahead()
-        dx, _ = self.player_offset()
-        if landing is None or abs(dx) <= landing[0]:
-            return False                       # unreachable, or the ninja isn't across
-        self.vel.y = -settings.SHINOBI_JUMP_SPEED
-        self.leaping = True
-        return True
 
     # ------------------------------------------------------------ actions
     def spot_player(self):
@@ -148,6 +110,8 @@ class Shinobi(Enemy):
                 self.set_mode("chase")
 
         elif mode == "chase":
+            if self.leaping:
+                return                         # committed to the jump: no turning mid-air
             self.face_player()
             gap, dy = self.gap_to_player()
             if gap <= settings.SHINOBI_ATTACK_RANGE and abs(dy) < self.hitbox.height:
@@ -192,7 +156,9 @@ class Shinobi(Enemy):
         facing = 1 if self.facing_right else -1
         if self.mode == "patrol_walk":
             return facing * settings.SAMURAI_WALK_SPEED
-        if self.mode == "chase" and (self.leaping or not self.dangerous_drop_ahead()):
+        if self.mode == "chase" and self.leaping:
+            return facing * self.LEAP_RUN_SPEED
+        if self.mode == "chase" and not self.dangerous_drop_ahead():
             return facing * settings.SHINOBI_RUN_SPEED
         if self.mode == "dash":
             return facing * settings.SHINOBI_DASH_SPEED
@@ -200,9 +166,7 @@ class Shinobi(Enemy):
 
     # ------------------------------------------------------------ update
     def update(self):
-        super().update()
-        if self.leaping and (self.on_ground and self.vel.y >= 0 or self.mode != "chase"):
-            self.leaping = False               # landed (or got hit mid-air)
+        super().update()                       # (also ends a leap on landing)
         if not self.alive() or self.mode != "dash":
             return
         if self.collisions["left"] or self.collisions["right"]:

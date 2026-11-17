@@ -9,6 +9,9 @@ Enemies:      E  samurai (patrols, chases and slashes the ninja when he spots hi
 Trees:        s sakura   p pine     b bamboo                 (behind the player)
 Props:        l lantern  T torii                             (behind the player)
 Exit:         X  torii gate - walk through it to finish the level
+              C  cave entrance - the exit of a boss level (opens once the boss is defeated)
+Boss arena:   S  rune seal: the arena entrance (closed until every other enemy is defeated)
+              B  where the stone golem lands (he drops in when you walk past the seal)
 NPCs:         M  wandering trader (merchant) - press E next to him to open the shop
 Rocks/plants: r pebbles  m boulder  c cairn  u bush  v small bush   (in front)
 
@@ -20,7 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.sprites import Archer, Enemy, ExitGate, Player, Prop, Rock, Shinobi, Trader, Tree
+from src.sprites import Archer, CaveEntrance, Enemy, ExitGate, Player, Prop, Rock, Shinobi, Trader, Tree
 from src.tilemap import Tilemap
 
 if TYPE_CHECKING:
@@ -122,6 +125,52 @@ SHADOW_WOODS = [
     "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDD....DD" "DDDDDDDDDDDDDDD" "DD..DDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDD....." "DDDDDDDDDDDDDDD" "DDDDDDDDDDDD",
 ]
 
+# "Crimson Ridge": stage 5, at sunset (evening background), trader at the start.
+# A step up from Shadow Woods - wider pits the shinobi leap across, shinobi pairs
+# under archer fire, three on one flat, mixed squads at the exit.
+# Built with tools/level_builder.py.
+CRIMSON_RIDGE = [
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." ".............A." "l.............." "..............." "..............." "..............." "..............." "......",
+    "..............." "..............." "..............." "...........GGGG" "GG.....p..E..N." ".c............." "..............." "....A.........v" "..............." "......",
+    "..............." "..............." "...A.........b." ".N..N.b.GGGDDDD" "DD...GGGGGGGGGG" "GGGG..........." "..............." "..GGGGG======GG" "GG............." "......",
+    "..P..M.s......." ".............r." "GGGGGG=====GGGG" "GGGGGGGGDDDDDDD" "DD...DDDDDDDDDD" "DDDDGGG.u......" "l..N...N...N..G" "GGDDDDD......DD" "DDGGG..m..E..N." "..X.l.",
+    "GGGGGGGG.v....." "N....E.u...GGGG" "DDDDDD.....DDDD" "DDDDDDDDDDDDDDD" "DD...DDDDDDDDDD" "DDDDDDDGGGG..GG" "GGGGGGGGGGGGGGD" "DDDDDDD......DD" "DDDDDGGGGGGGGGG" "GGGGGG",
+    "DDDDDDDDGGGGGGG" "GGGGGGGG...DDDD" "DDDDDD.....DDDD" "DDDDDDDDDDDDDDD" "DD...DDDDDDDDDD" "DDDDDDDDDDD..DD" "DDDDDDDDDDDDDDD" "DDDDDDD......DD" "DDDDDDDDDDDDDDD" "DDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDD...DDDD" "DDDDDD.....DDDD" "DDDDDDDDDDDDDDD" "DD...DDDDDDDDDD" "DDDDDDDDDDD..DD" "DDDDDDDDDDDDDDD" "DDDDDDD......DD" "DDDDDDDDDDDDDDD" "DDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDD...DDDD" "DDDDDD.....DDDD" "DDDDDDDDDDDDDDD" "DD...DDDDDDDDDD" "DDDDDDDDDDD..DD" "DDDDDDDDDDDDDDD" "DDDDDDD......DD" "DDDDDDDDDDDDDDD" "DDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDD...DDDD" "DDDDDD.....DDDD" "DDDDDDDDDDDDDDD" "DD...DDDDDDDDDD" "DDDDDDDDDDD..DD" "DDDDDDDDDDDDDDD" "DDDDDDD......DD" "DDDDDDDDDDDDDDD" "DDDDDD",
+]
+
+# "Golem's Gate": stage 6, at night. A trader under the moon, the usual enemies
+# on the way (all of them must fall to break the rune seal S), then the arena:
+# the stone golem drops in at B and guards the cave entrance C (the exit).
+# Built with tools/level_builder.py.
+GOLEMS_GATE = [
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "....",
+    "..............." "..............." "...A..c........" ".b..N..E.b....." "..............." "..............." "..............." "....",
+    "..P..M..l......" "..............r" ".GGGGGGGG=====G" "GGGGGGGGGGG...." "..............." "..u..l.S......." "......B........" ".C..",
+    "GGGGGGGGGG.v..." ".p..E..N....GGG" "GDDDDDDDD.....D" "DDDDDDDDDDDGGG." "r........A..N.l" ".GGGGGGGGGGGGGG" "GGGGGGGGGGGGGGG" "GGGG",
+    "DDDDDDDDDDGGGGG" "GGGGGGGGGG..DDD" "DDDDDDDDD.....D" "DDDDDDDDDDDDDDG" "GGG...GGGGGGGGG" "GDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDD..DDD" "DDDDDDDDD.....D" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDD..DDD" "DDDDDDDDD.....D" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDD..DDD" "DDDDDDDDD.....D" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDD",
+]
+
 
 # Levels in play order. Reaching the exit gate (X) loads the next one.
 LEVELS = [
@@ -129,7 +178,11 @@ LEVELS = [
     {"name": "Shrine Hill", "layout": HILL_LEVEL, "coins": 1},
     {"name": "Bamboo Valley", "layout": BAMBOO_VALLEY, "coins": 1},
     {"name": "Mountain Pass", "layout": MOUNTAIN_PASS, "coins": 1},
-    {"name": "Shadow Woods", "layout": SHADOW_WOODS},
+    {"name": "Shadow Woods", "layout": SHADOW_WOODS, "coins": 1},
+    # "background": a theme from settings.BACKGROUND_THEMES (default "day")
+    {"name": "Crimson Ridge", "layout": CRIMSON_RIDGE, "coins": 1, "background": "evening"},
+    # "night": dark-blue veil over the world (settings.NIGHT_TINT)
+    {"name": "Golem's Gate", "layout": GOLEMS_GATE, "coins": 1, "background": "night", "night": True},
 ]
 
 
@@ -162,6 +215,12 @@ def load_level(game: Game, layout):
                 Trader(game, feet)
             elif ch == "X":
                 ExitGate(game, feet)
+            elif ch == "C":
+                CaveEntrance(game, feet)
+            elif ch == "S":
+                game.seal_pos = feet
+            elif ch == "B":
+                game.boss_spawn = feet
             elif ch != ".":
                 raise ValueError(f"Unknown level character '{ch}' at column {col}, row {row}")
     return tilemap

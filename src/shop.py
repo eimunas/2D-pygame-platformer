@@ -4,8 +4,8 @@
     E or Esc       : leave
 
 Items come from settings.SHOP_ITEMS; coins and bought items live in
-game.progress (saved). Buying only stores the item for now - using the bow
-and bombs in gameplay comes later.
+game.progress (saved). "unique" items can only be held once: the bow forever,
+the bomb until it's thrown - then the trader sells you a new one.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ class ShopUI:
     def buy(self, item):
         progress = self.game.progress
         if self.owned_out(item):
-            self.say(f"You already own the {item['name'].lower()}.", DIM)
+            self.say(item.get("held", f"You already own the {item['name'].lower()}."), DIM)
         elif progress.coins < item["price"]:
             missing = item["price"] - progress.coins
             self.say(f"Not enough coins - you need {missing} more.", RED)

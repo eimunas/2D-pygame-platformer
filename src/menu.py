@@ -1,10 +1,11 @@
-"""Main menu: pick a stage (only unlocked ones can be started) or quit.
+"""Main menu: pick a stage (only unlocked ones can be started), reset the save, or quit.
 
     W/S or Up/Down : choose          Enter / Space : start the stage
     mouse          : hover + click   Esc           : quit the game
 
 Stage 1 is always open; every other stage opens once the stage before it is
-cleared (see src/progress.py). The forest background drifts slowly, the ninja
+cleared (see src/progress.py). "Reset progress" wipes the save (cleared stages,
+coins, bought items) after a second press to confirm. The forest background drifts slowly, the ninja
 and a samurai face off in the foreground, and main_menu music loops.
 """
 
@@ -34,7 +35,8 @@ GOLD = (232, 186, 82)
 RED = (214, 52, 64)
 PANEL = (14, 12, 22)
 
-ROW_W, ROW_H, ROW_GAP = 440, 46, 10
+ROW_W, ROW_H, ROW_GAP = 440, 36, 6
+RESET_CONFIRM_TIME = 3.0           # seconds the "press again to confirm" stays armed
 
 
 class MainMenu:
@@ -48,6 +50,8 @@ class MainMenu:
         self.time = 0.0
         self.notice = ""                   # e.g. "Clear Stage 1 to unlock"
         self.notice_timer = 0.0
+        self.notice_color = RED
+        self.reset_armed = 0.0             # > 0: the next press on "Reset progress" wipes the save
         self.last_mouse = None
 
         # the ninja and a samurai facing each other in the foreground
@@ -63,12 +67,12 @@ class MainMenu:
     # ------------------------------------------------------------ items
     @property
     def items(self):
-        """One entry per stage, then Quit."""
-        return list(range(len(LEVELS))) + ["quit"]
+        """One entry per stage, then Reset progress and Quit."""
+        return list(range(len(LEVELS))) + ["reset", "quit"]
 
     def row_rect(self, i):
         w, _ = self.game.screen.get_size()
-        top = 172
+        top = 162
         return pygame.Rect((w - ROW_W) // 2, top + i * (ROW_H + ROW_GAP), ROW_W, ROW_H)
 
     def open(self):
@@ -76,22 +80,36 @@ class MainMenu:
         progress = self.game.progress
         self.selected = max(i for i in range(len(LEVELS)) if progress.is_unlocked(i))
         self.notice_timer = 0.0
+        self.reset_armed = 0.0
         self.last_mouse = None
+
+    def say(self, text, color=RED, seconds=2.0):
+        self.notice, self.notice_color, self.notice_timer = text, color, seconds
 
     # ------------------------------------------------------------ input
     def activate(self, item):
+        if item == "reset":
+            if self.reset_armed > 0:
+                self.game.progress.reset()
+                self.reset_armed = 0.0
+                self.selected = 0
+                self.say("Progress reset - starting over from Stage 1", GOLD, 2.5)
+            else:
+                self.reset_armed = RESET_CONFIRM_TIME
+                self.say("This erases all cleared stages, coins and items!", RED, RESET_CONFIRM_TIME)
+            return
         if item == "quit":
             self.game.running = False
         elif self.game.progress.is_unlocked(item):
             self.game.load_level(item)
         else:
-            self.notice = f"Clear Stage {item} to unlock Stage {item + 1}"
-            self.notice_timer = 2.0
+            self.say(f"Clear Stage {item} to unlock Stage {item + 1}")
 
     def update(self, dt):
         self.time += dt
         self.scroll += settings.MENU_SCROLL_SPEED * dt
         self.notice_timer = max(0.0, self.notice_timer - dt)
+        self.reset_armed = max(0.0, self.reset_armed - dt)
         self.ninja.update(dt)
         self.samurai.update(dt)
 
@@ -115,6 +133,8 @@ class MainMenu:
 
         if any(k in game.just_pressed for k in CONFIRM_KEYS):
             self.activate(self.items[self.selected])
+        if self.items[self.selected] != "reset":
+            self.reset_armed = 0.0             # moved away: the reset is no longer armed
 
     # ------------------------------------------------------------ drawing
     def draw(self, surface):
@@ -133,9 +153,9 @@ class MainMenu:
         for i, item in enumerate(self.items):
             self.draw_row(surface, i, item, progress)
 
-        if self.notice_timer > 0:
-            self.text(surface, self.small_font, self.notice, (w // 2, self.row_rect(len(self.items)).top + 8),
-                      color=RED, alpha=round(255 * min(1.0, self.notice_timer / 0.4)))
+        if self.notice_timer > 0:              # shown in place of the subtitle
+            self.text(surface, self.small_font, self.notice, (w // 2, 140),
+                      color=self.notice_color, alpha=round(255 * min(1.0, self.notice_timer / 0.4)))
         hint = "W/S: choose    Enter: start    Esc: quit"
         self.text(surface, self.small_font, hint, (w // 2, h - 24), color=DIM)
 
@@ -143,7 +163,8 @@ class MainMenu:
         w = surface.get_width()
         bob = round(math.sin(self.time * 1.6) * 3)
         self.text(surface, self.title_font, settings.MENU_TITLE, (w // 2, 82 + bob), color=TEXT, shadow=5)
-        self.text(surface, self.small_font, settings.MENU_SUBTITLE, (w // 2, 140), color=GOLD)
+        if self.notice_timer <= 0:
+            self.text(surface, self.small_font, settings.MENU_SUBTITLE, (w // 2, 140), color=GOLD)
 
     def draw_duel(self, surface):
         w, h = surface.get_size()
@@ -156,7 +177,7 @@ class MainMenu:
     def draw_row(self, surface, i, item, progress):
         rect = self.row_rect(i)
         selected = i == self.selected
-        locked = item != "quit" and not progress.is_unlocked(item)
+        locked = item not in ("quit", "reset") and not progress.is_unlocked(item)
 
         panel = pygame.Surface(rect.size, pygame.SRCALPHA)
         panel.fill((*PANEL, 215 if selected else 150))
@@ -171,6 +192,13 @@ class MainMenu:
 
         if item == "quit":
             self.text(surface, self.row_font, "Quit", rect.center, color=TEXT if selected else DIM)
+            return
+        if item == "reset":
+            if self.reset_armed > 0:
+                label = f"Press again to confirm ({math.ceil(self.reset_armed)})"
+                self.text(surface, self.row_font, label, rect.center, color=RED)
+            else:
+                self.text(surface, self.row_font, "Reset progress", rect.center, color=TEXT if selected else DIM)
             return
 
         name_color = DIM if locked else TEXT

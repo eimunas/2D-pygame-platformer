@@ -27,6 +27,7 @@ import pygame
 from src import settings
 from src.audio import Audio
 from src.background import ParallaxBackground
+from src.boss import BossArena
 from src.camera import Camera
 from src.cutscene import IntroCutscene
 from src.inventory import WeaponBar, weapon_icon
@@ -60,9 +61,8 @@ class Game:
         self.mouse_just_pressed = set()        # mouse buttons clicked this frame (1 = left)
         self.wheel = 0                         # mouse wheel notches this frame (+ = up)
 
-        self.background = ParallaxBackground(self.screen.get_size())
-        for path, factor in settings.BACKGROUND_LAYERS:
-            self.background.add_layer(os.path.join(settings.ASSETS_DIR, path), factor=factor)
+        self.backgrounds = {}                  # theme name -> ParallaxBackground (loaded on first use)
+        self.background = self.get_background("day")
 
         self.progress = Progress(settings.SAVE_FILE)    # cleared stages, coins, items
         self.main_menu = MainMenu(self)
@@ -74,10 +74,22 @@ class Game:
         else:
             self.load_level(start_level)
 
+    def get_background(self, theme):
+        """The parallax background for a theme in settings.BACKGROUND_THEMES."""
+        if theme not in self.backgrounds:
+            folder = settings.BACKGROUND_THEMES[theme]
+            background = ParallaxBackground(self.screen.get_size())
+            for path, factor in settings.BACKGROUND_LAYERS:
+                file = os.path.join(settings.ASSETS_DIR, folder, os.path.basename(path))
+                background.add_layer(file, factor=factor)
+            self.backgrounds[theme] = background
+        return self.backgrounds[theme]
+
     # ------------------------------------------------------------ menu
     def open_menu(self):
         """Back to the main menu (from anywhere): silence the stage, play the menu music."""
         self.state = "menu"
+        self.background = self.get_background("day")
         if self.audio.enabled:
             pygame.mixer.stop()                    # cut intro / defeat sounds etc.
         self.audio.stop_music()
@@ -89,6 +101,7 @@ class Game:
         """(Re)build everything that belongs to a level."""
         self.level_index = index
         self.level = LEVELS[index]
+        self.background = self.get_background(self.level.get("background", "day"))
 
         # fresh sprite groups (the old level's sprites simply get dropped)
         self.all_sprites = pygame.sprite.Group()        # everything that gets update()
@@ -105,10 +118,13 @@ class Game:
         # creates the tilemap, decorations, enemies, exit gate and self.player
         self.player = None
         self.exit_gate = None
+        self.boss = None                       # the golem, once he has dropped in
+        self.seal_pos = self.boss_spawn = None # boss arena markers (level chars S / B)
         self.tilemap = load_level(self, self.level["layout"])
         if self.player is None:
             raise ValueError(f"Level '{self.level['name']}' has no 'P' (player spawn)")
         self.place_coins()
+        self.arena = BossArena(self, self.seal_pos or self.boss_spawn, self.boss_spawn) if self.boss_spawn else None
 
         self.camera = Camera(self, self.player)
         self.health_bar = PlayerHealthBar(self)
@@ -144,6 +160,17 @@ class Game:
             if w["id"] == wanted and (w["item"] is None or self.progress.item_count(w["item"]) > 0):
                 return wanted
         return "katana"
+
+    def on_weapon_used_up(self):
+        """The equipped consumable (the bomb) is gone: back to the katana, and
+        flash the weapon bar so the switch is visible."""
+        self.player.set_weapon("katana")
+        self.progress.equip("katana")
+        self.weapon_bar.timer = settings.WEAPON_BAR_TIME
+
+    def on_boss_defeated(self):
+        if self.arena:
+            self.arena.on_boss_defeated()
 
     def trader_nearby(self):
         return next((npc for npc in self.npcs if npc.near), None)
@@ -292,6 +319,8 @@ class Game:
             self.weapon_bar.scroll(-self.wheel)    # wheel down = next weapon
         self.weapon_bar.update(self.dt)
         self.all_sprites.update()
+        if self.arena:
+            self.arena.update(self.dt)         # rune seal, boss cutscene trigger
         self.camera.update()   # after sprites, so it follows this frame's position
         self.health_bar.update(self.dt)
 
@@ -300,7 +329,8 @@ class Game:
             self.open_shop(trader)
             return
 
-        if (self.state == "playing" and self.exit_gate
+        if (self.state == "playing" and self.exit_gate and not self.in_cutscene
+                and (self.arena is None or self.arena.exit_open)
                 and self.player.hitbox.colliderect(self.exit_gate.trigger)):
             self.complete_level()
 
@@ -319,12 +349,18 @@ class Game:
         self.draw_group(self.projectiles)
         self.draw_group(self.effects_front)
         self.draw_group(self.foreground_decor)
+        if self.level.get("night"):
+            self.screen.blit(self.night_veil(), (0, 0))  # darkens the world, not the HUD
+        if self.arena:
+            self.arena.draw_world(self.screen, self.camera)   # glowing seal (over the veil)
         if self.in_cutscene:
             self.cutscene.draw(self.screen)             # letterbox bars, no HUD
         elif self.state in ("playing", "shop"):
             self.draw_enemy_bars()
             self.draw_trade_prompt()
             self.draw_hud()                             # screen space
+            if self.arena:
+                self.arena.draw_hud(self.screen)        # boss health bar, seal hint
             if self.state == "playing":
                 self.weapon_bar.draw(self.screen)
             if self.state == "shop":
@@ -338,6 +374,12 @@ class Game:
             self.draw_banner("Victory!", "All stages cleared  -  Enter: main menu   R: play again")
         pygame.display.flip()
 
+    def night_veil(self):
+        if getattr(self, "_night_veil", None) is None:
+            self._night_veil = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            self._night_veil.fill(settings.NIGHT_TINT)
+        return self._night_veil
+
     def draw_group(self, group):
         """Draw a sprite group shifted by the camera, skipping off-screen sprites."""
         view = self.camera.view_rect
@@ -348,6 +390,8 @@ class Game:
     def draw_enemy_bars(self):
         view = self.camera.view_rect
         for enemy in self.enemies:
+            if getattr(enemy, "BOSS", False):
+                continue                        # the boss has his own big bar
             if enemy.rect.colliderect(view):
                 draw_enemy_bar(self.screen, enemy, self.camera)
 
@@ -434,5 +478,6 @@ class Game:
             f"state: {p.state}   frame: {anim.index + 1}/{len(anim.frames)}   "
             f"air jumps: {p.air_jumps_left}",
         ]
+        color = (206, 212, 232) if self.level.get("night") else (30, 24, 30)   # readable at night
         for i, line in enumerate(lines):
-            self.screen.blit(self.font.render(line, True, (30, 24, 30)), (16, bar.bottom + 10 + i * 26))
+            self.screen.blit(self.font.render(line, True, color), (16, bar.bottom + 10 + i * 26))

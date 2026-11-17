@@ -23,6 +23,7 @@ TREE_KINDS = ("sakura", "pine", "bamboo")
 PROPS = {
     "lantern": ("props/lantern.png", "back"),
     "torii": ("props/torii.png", "back"),
+    "cave_entrance": ("props/cave_entrance.png", "back"),
     "bush": ("plants/bush.png", "front"),
     "bush_small": ("plants/bush_small.png", "front"),
 }
@@ -78,6 +79,18 @@ class ExitGate(Prop):
         super().__init__(game, "torii", pos)
         # trigger = the opening between the pillars, at ground level
         self.trigger = pygame.Rect(0, 0, 8 * settings.SCALE, 10 * settings.SCALE)
+        self.trigger.midbottom = self.rect.midbottom
+        game.exit_gate = self
+
+
+class CaveEntrance(Prop):
+    """The ancient caves: a level exit like the torii gate - walking into the dark
+    mouth finishes the level (but only once its guardian is defeated, see
+    BossArena.exit_open)."""
+
+    def __init__(self, game: Game, pos):
+        super().__init__(game, "cave_entrance", pos)
+        self.trigger = pygame.Rect(0, 0, 10 * settings.SCALE, 14 * settings.SCALE)
         self.trigger.midbottom = self.rect.midbottom
         game.exit_gate = self
 

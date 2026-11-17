@@ -12,7 +12,7 @@ and what's there; things standing on the ground are placed by column offset.
     print(b.as_python("MY_LEVEL"))
 
 Characters are the same as in src/level.py (P player, E samurai, A archer, N shinobi, M trader,
-X exit gate, s/p/b trees, l/T/u/v props, r/m/c rocks).
+X exit gate, C cave exit, S rune seal, B golem, s/p/b trees, l/T/u/v props, r/m/c rocks).
 
 Run this file to print the built-in levels as Python code:
     python tools/level_builder.py
@@ -167,9 +167,65 @@ def shadow_woods():
     return b
 
 
+def crimson_ridge():
+    """Stage 5 (evening): a step up from Shadow Woods. A trader at the start,
+    then wider pits, shinobi that leap after you, archers covering the fights,
+    and mixed squads at the end."""
+    b = LevelBuilder(rows=16)
+    b.flat(8, 11, on={2: "P", 5: "M", 7: "s"})     # short breather: the trader waits at sunset
+    b.flat(3, 12, on={1: "v"})
+    b.flat(12, 12, on={4: "N", 9: "E", 11: "u"})   # shinobi + samurai right away
+    b.gap(3)                                       # wider pit (double jump)
+    b.flat(4, 11, on={2: "r"})
+    b.flat(6, 10, on={3: "A"})                     # archer ledge
+    b.bridge(5)
+    b.flat(12, 10, on={2: "b", 5: "N", 8: "N", 10: "b"})   # shinobi pair under fire
+    b.flat(3, 9)
+    b.flat(6, 8, on={2: "A", 4: "l"})              # high archer
+    b.gap(3)                                       # pit - the shinobi leap these
+    b.flat(14, 9, on={2: "p", 5: "E", 8: "N", 11: "c"})   # samurai + shinobi
+    b.flat(3, 10)
+    b.flat(4, 11, on={1: "u"})
+    b.gap(2)
+    b.flat(16, 11, on={2: "l", 5: "N", 9: "N", 13: "N"})  # three shinobi on a long flat
+    b.flat(3, 10)
+    b.flat(5, 9, on={2: "A"})                      # archer covering the last bridge
+    b.bridge(6)
+    b.flat(4, 9, on={1: "v"})
+    b.flat(3, 10)
+    b.flat(16, 11, on={2: "m", 5: "E", 8: "N", 12: "X", 14: "l"})  # exit guards
+    return b
+
+
+def golems_gate():
+    """Stage 6 (night): a trader under the moon, the usual enemies on the way
+    (they must ALL fall to break the rune seal), then the flat arena where the
+    stone golem drops in, guarding the cave entrance at the end of the map."""
+    b = LevelBuilder(rows=16)
+    b.flat(10, 11, on={2: "P", 5: "M", 8: "l"})    # trader under the moon
+    b.flat(3, 12, on={1: "v"})
+    b.flat(12, 12, on={3: "p", 6: "E", 9: "N"})    # samurai + shinobi
+    b.gap(2)
+    b.flat(4, 11, on={2: "r"})
+    b.flat(8, 10, on={2: "A", 5: "c"})             # archer ledge
+    b.bridge(5)
+    b.flat(12, 10, on={2: "b", 5: "N", 8: "E", 10: "b"})   # shinobi + samurai in the bamboo
+    b.flat(3, 11)
+    b.flat(4, 12, on={1: "r"})
+    b.gap(3)
+    b.flat(10, 12, on={3: "A", 6: "N", 8: "l"})    # last guards before the arena
+    b.flat(3, 11, on={1: "u"})
+    b.flat(30, 11, on={1: "l", 3: "S", 17: "B", 27: "C"})   # arena: seal, golem, cave
+    return b
+
+
 if __name__ == "__main__":
     print(bamboo_valley().as_python("BAMBOO_VALLEY"))
     print()
     print(mountain_pass().as_python("MOUNTAIN_PASS"))
     print()
     print(shadow_woods().as_python("SHADOW_WOODS"))
+    print()
+    print(crimson_ridge().as_python("CRIMSON_RIDGE"))
+    print()
+    print(golems_gate().as_python("GOLEMS_GATE"))

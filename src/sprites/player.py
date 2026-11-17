@@ -10,6 +10,7 @@ import pygame
 
 from src import settings
 from src.sprites.animation import Animation, load_frames
+from src.sprites.bomb import Bomb
 from src.sprites.effects import Afterimage, BloodDrop, BloodPool, SlashStreak, blood_spray
 from src.sprites.physics_entity import PhysicsEntity
 from src.sprites.projectile import Arrow
@@ -63,6 +64,8 @@ class Player(PhysicsEntity):
         self.shooting = False          # playing the bow animation
         self.arrow_fired = False
         self.bow_cooldown = 0.0
+        self.throwing = False          # playing the bomb-throw swing (no blade damage)
+        self.throw_cooldown = 0.0
 
         # dash attack
         self.dash_attacking = False    # whole move: dash + finishing cut
@@ -123,6 +126,10 @@ class Player(PhysicsEntity):
         if self.weapon == "bow":
             if ATTACK_BUTTON in self.game.mouse_just_pressed and self.can_shoot():
                 self.start_shot()
+        # bomb: left click throws it (one use)
+        elif self.weapon == "bomb":
+            if ATTACK_BUTTON in self.game.mouse_just_pressed and self.can_throw():
+                self.throw_bomb()
         # katana combo
         elif ATTACK_BUTTON in self.game.mouse_just_pressed and not self.dash_attacking:
             if not self.attacking:
@@ -187,6 +194,7 @@ class Player(PhysicsEntity):
 
     def start_attack(self, step):
         attack = settings.PLAYER_ATTACKS[step]
+        self.throwing = False              # a katana cut right after the last bomb's throw
         self.attacking = True
         self.attack_queued = False
         self.combo_step = step
@@ -234,8 +242,28 @@ class Player(PhysicsEntity):
         self.game.audio.play("arrow")
 
     def cancel_shot(self):
+        """Stop a bow shot or a bomb-throw swing (the bomb itself is already flying)."""
         self.shooting = False
+        self.throwing = False
 
+    # ------------------------------------------------------------ bomb
+    def can_throw(self):
+        return (not (self.shooting or self.dash_attacking or self.throwing)
+                and self.throw_cooldown <= 0 and self.game.progress.item_count("bomb") > 0)
+
+    def throw_bomb(self):
+        facing = 1 if self.facing_right else -1
+        fx, up = settings.BOMB_THROW_SPEED
+        start = (self.hitbox.centerx + facing * 4 * settings.SCALE, self.hitbox.top + 5 * settings.SCALE)
+        Bomb(self.game, start, (facing * fx + self.vel.x * 0.3, -up))
+        self.game.audio.play("attack", volume=0.6)
+        if self.game.progress.use_item("bomb") == 0:
+            self.game.on_weapon_used_up()          # back to the katana (before the swing starts)
+        self.throwing = True
+        self.flipping = False
+        self.state = "attack1"                     # the cut animation doubles as a throw
+        self.animation.reset()
+        self.throw_cooldown = settings.BOMB_THROW_COOLDOWN
     def set_weapon(self, weapon_id):
         """Switch weapons (from the weapon bar): stops whatever attack is going on."""
         if weapon_id != self.weapon:
@@ -351,6 +379,8 @@ class Player(PhysicsEntity):
         if hb is None:
             return
         for enemy in list(self.game.enemies):        # list(): enemies may die here
+            if enemy.invulnerable:
+                continue                             # (not marked: can still be hit after)
             if enemy.last_hit_by != self.attack_id and hb.colliderect(enemy.hitbox):
                 enemy.last_hit_by = self.attack_id
                 enemy.take_damage(self.current_damage, self.hitbox.centerx)
@@ -389,6 +419,8 @@ class Player(PhysicsEntity):
             return "dash"
         if self.shooting:
             return "bow"
+        if self.throwing:
+            return "attack1"
         if self.attacking:
             return self.state          # the current attack animation
         if self.flipping:
@@ -413,6 +445,7 @@ class Player(PhysicsEntity):
         self.combo_timer = max(0.0, self.combo_timer - dt)
         self.dash_cooldown = max(0.0, self.dash_cooldown - dt)
         self.bow_cooldown = max(0.0, self.bow_cooldown - dt)
+        self.throw_cooldown = max(0.0, self.throw_cooldown - dt)
         self.invuln_timer = max(0.0, self.invuln_timer - dt)
         self.hurt_timer = max(0.0, self.hurt_timer - dt)
 
@@ -441,6 +474,9 @@ class Player(PhysicsEntity):
                 self.shooting = False
                 self.bow_cooldown = settings.PLAYER_BOW_COOLDOWN
                 self.set_state(self.choose_state())
+        if self.throwing and self.animations["attack1"].finished:
+            self.throwing = False
+            self.set_state(self.choose_state())
         self.hit_enemies()       # before the attack may end, so last frames still count
         if self.dash_attacking and self.dash_timer <= 0 and self.animation.finished:
             self.dash_attacking = False

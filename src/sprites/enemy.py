@@ -8,8 +8,10 @@ Behaviour (a small state machine, see `self.mode`):
          hidden behind terrain)
     alert        -> spotted! screen shakes, short pause, faces the ninja -> chase
     chase        -> runs at the ninja with the katana raised; hops up steps and
-                    drops down small ones (<= SAMURAI_MAX_STEP_DOWN tiles), stops
-                    at deep drops/gaps; gives up if the ninja gets far away
+                    drops down small ones (<= SAMURAI_MAX_STEP_DOWN tiles); at a
+                    pit he LEAPS across if the ninja is on the other side and he
+                    can reach it (else he waits at the edge); gives up if the
+                    ninja gets far away
     attack       -> heavy overhead cut; the ninja takes damage if the blade
                     connects on the active frames
     recover      -> short cooldown, then chase again
@@ -47,6 +49,7 @@ class Enemy(PhysicsEntity):
     ANIM_FPS = settings.SAMURAI_ANIM_FPS
     PLAY_ONCE = ("attack",)                    # animations that don't loop
     MODE_ANIM = MODE_ANIM
+    HITBOX = settings.SAMURAI_HITBOX
     MAX_HEALTH = settings.SAMURAI_MAX_HEALTH
     SIGHT_RANGE = settings.SAMURAI_SIGHT_RANGE
     SIGHT_HEIGHT = settings.SAMURAI_SIGHT_HEIGHT
@@ -55,9 +58,11 @@ class Enemy(PhysicsEntity):
     ATTACK_ACTIVE_FRAMES = settings.SAMURAI_ATTACK_ACTIVE_FRAMES
     BLADE_REACH = 12                           # art px from his centre the blade reaches
     DAMAGE = settings.SAMURAI_DAMAGE
+    LEAP_SPEED = settings.SAMURAI_LEAP_SPEED           # take-off speed when jumping a pit
+    LEAP_RUN_SPEED = settings.SAMURAI_LEAP_RUN_SPEED   # forward speed while in that jump
 
     def __init__(self, game: Game, pos):
-        super().__init__(game, pos, settings.SAMURAI_HITBOX, groups=(game.actors, game.enemies))
+        super().__init__(game, pos, self.HITBOX, groups=(game.actors, game.enemies))
         self.animations = {
             name: Animation(load_frames(os.path.join(self.ASSET_DIR, name), settings.SCALE),
                             fps, loop=name not in self.PLAY_ONCE)
@@ -74,6 +79,7 @@ class Enemy(PhysicsEntity):
         self.health = self.max_health
         self.flash_timer = 0.0
         self.last_hit_by = -1          # id of the player swing that last hit us
+        self.leaping = False           # in the air, jumping over a pit
 
         self.image = self.animation.image
         self.align_image()
@@ -138,6 +144,54 @@ class Enemy(PhysicsEntity):
         """Chase rule: small steps down are fine, deep drops/gaps are not."""
         return self.drop_ahead() is None
 
+    # ------------------------------------------------------------ jumping pits
+    def landing_ahead(self):
+        """If there's a pit right in front of him: (gap px to the first ground on
+        the other side within ENEMY_MAX_LEAP_TILES, how much higher it is in px);
+        None if there's no such ground or he couldn't reach it."""
+        tm, ts = self.game.tilemap, self.game.tilemap.tile_size
+        facing = 1 if self.facing_right else -1
+        front = self.hitbox.right if self.facing_right else self.hitbox.left
+        _, feet_row = tm.world_to_grid(self.hitbox.centerx, self.hitbox.bottom + 1)
+        col0, _ = tm.world_to_grid(front + facing * 2, self.hitbox.bottom + 1)
+        for d in range(1, settings.ENEMY_MAX_LEAP_TILES + 1):
+            col = col0 + facing * d
+            if not tm.in_bounds(col, feet_row):
+                return None
+            for row in range(feet_row - 1, feet_row + 3):          # 1 up .. 2 down
+                surface = tm.is_solid(col, row) or tm.get_tile(col, row) == "bridge"
+                if surface and not tm.is_solid(col, row - 1) and not tm.is_solid(col, row - 2):
+                    edge = col * ts if facing > 0 else (col + 1) * ts
+                    gap = abs(edge - front)
+                    rise = (feet_row - row) * ts
+                    return (gap, rise) if self.can_reach(gap, rise) else None
+        return None
+
+    def can_reach(self, gap, rise):
+        """Ballistics: does a running jump carry him `gap` px forward (plus half
+        his body, to land safely) onto ground `rise` px higher (negative = lower)?"""
+        v, g = self.LEAP_SPEED, self.gravity
+        if v * v < 2 * g * rise:
+            return False                       # can't even jump that high
+        airtime = (v + math.sqrt(v * v - 2 * g * rise)) / g
+        return self.LEAP_RUN_SPEED * airtime >= gap + self.hitbox.width / 2
+
+    def try_leap(self, toward_player=True):
+        """At a pit's edge: jump over it if he can reach the other side (and, when
+        chasing, only if the ninja is actually over there). True = jumped."""
+        if not self.on_ground or not self.dangerous_drop_ahead():
+            return False
+        landing = self.landing_ahead()
+        if landing is None:
+            return False
+        if toward_player:
+            dx, _ = self.player_offset()
+            if (dx > 0) != self.facing_right or abs(dx) <= landing[0]:
+                return False                   # the ninja isn't across this pit
+        self.vel.y = -self.LEAP_SPEED
+        self.leaping = True
+        return True
+
     def face_player(self):
         dx, _ = self.player_offset()
         if abs(dx) > 4:                       # avoid flip-flopping when right on top
@@ -194,11 +248,16 @@ class Enemy(PhysicsEntity):
                 self.set_mode("chase")
 
         elif mode == "chase":
+            if self.leaping:
+                return                         # committed to the jump: no turning mid-air
             self.face_player()
             dx, dy = self.player_offset()
             gap = abs(dx) - (self.hitbox.width + self.game.player.hitbox.width) / 2
             if gap <= settings.SAMURAI_ATTACK_RANGE and abs(dy) < self.hitbox.height:
                 self.start_attack()
+                return
+            if self.try_leap():
+                return
             # lose interest if the ninja stays far away
             far = abs(dx) > settings.SAMURAI_LOSE_RANGE or abs(dy) > 3 * settings.TILE_SIZE
             self.lose_timer = self.lose_timer + dt if far else 0.0
@@ -227,11 +286,18 @@ class Enemy(PhysicsEntity):
         facing = 1 if self.facing_right else -1
         if self.mode == "patrol_walk":
             return facing * settings.SAMURAI_WALK_SPEED
+        if self.mode == "chase" and self.leaping:
+            return facing * self.LEAP_RUN_SPEED
         if self.mode == "chase" and not self.dangerous_drop_ahead():
             return facing * settings.SAMURAI_RUN_SPEED
         return 0
 
     # ------------------------------------------------------------ combat
+    @property
+    def invulnerable(self):
+        """True while the player's blade and arrows can't hurt him."""
+        return False
+
     @property
     def attack_hitbox(self):
         if self.mode != "attack" or self.animation.index not in self.ATTACK_ACTIVE_FRAMES:
@@ -301,6 +367,8 @@ class Enemy(PhysicsEntity):
         self.physics_update()
         if not self.alive():                   # fell out of the map
             return
+        if self.leaping and (self.on_ground and self.vel.y >= 0 or self.mode not in ("chase", "retreat")):
+            self.leaping = False               # landed (or got hit mid-air)
 
         if self.collisions["left"] or self.collisions["right"]:
             if self.mode == "patrol_walk":
