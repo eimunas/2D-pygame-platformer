@@ -11,17 +11,25 @@ and what's there; things standing on the ground are placed by column offset.
     b.flat(6, 10, on={3: "A"})            # ground 2 rows higher (a 2-tile step up)
     print(b.as_python("MY_LEVEL"))
 
+    LevelBuilder(rows=16, ceiling_air=(5, 6))   # caves: a rock ceiling 5-6 rows above the floor
+
 Characters are the same as in src/level.py (P player, E samurai, A archer, N shinobi, M trader,
-X exit gate, C cave exit, S rune seal, B golem, s/p/b trees, l/T/u/v props, r/m/c rocks).
+X exit gate, C cave exit, S rune seal, B golem, Z skeleton, W banshee, U guardian, o/j/K cave props, s/p/b trees, l/T/u/v props, r/m/c rocks).
 
 Run this file to print the built-in levels as Python code:
     python tools/level_builder.py
 """
 
 
+import math
+
+
 class LevelBuilder:
-    def __init__(self, rows=16):
+    def __init__(self, rows=16, ceiling_air=None):
+        """ceiling_air: (min, max) rows of open air between the floor and a wavy
+        rock ceiling (caves); None = open sky."""
         self.rows = rows
+        self.ceiling_air = ceiling_air
         self.columns = []          # per column: ("ground", top) | ("gap",) | ("bridge", deck_row)
         self.things = {}           # column -> character standing on the ground there
         self.height = None         # current ground top row (for bridges)
@@ -50,6 +58,7 @@ class LevelBuilder:
     # ------------------------------------------------------------ output
     def build(self):
         grid = [["."] * len(self.columns) for _ in range(self.rows)]
+        last_surface = self.rows - 1
         for c, col in enumerate(self.columns):
             if col[0] == "ground":
                 top = col[1]
@@ -66,7 +75,20 @@ class LevelBuilder:
                 assert surface is not None, f"'{self.things[c]}' at column {c} has nothing to stand on"
                 assert grid[surface - 1][c] == ".", f"column {c}: something is already there"
                 grid[surface - 1][c] = self.things[c]
+            if self.ceiling_air:
+                last_surface = surface if surface is not None else last_surface
+                self.add_ceiling(grid, c, last_surface)
         return ["".join(row) for row in grid]
+
+    def add_ceiling(self, grid, c, surface):
+        """Rock from the top of the map down to `air` rows above the floor
+        (smoothly wavy, so stalactite edges vary along the cave)."""
+        lo, hi = self.ceiling_air
+        wave = 0.5 + 0.25 * math.sin(c * 0.53) + 0.25 * math.sin(c * 0.21 + 1.3)
+        air = lo + round((hi - lo) * wave)
+        for r in range(0, max(0, surface - air)):
+            if grid[r][c] == ".":
+                grid[r][c] = "D"
 
     def as_python(self, name, chunk=15):
         lines = [f"{name} = ["]
@@ -219,6 +241,90 @@ def golems_gate():
     return b
 
 
+def ancient_caves():
+    """Stage 7 (inside the caves the golem guarded): rocky floor and ceiling,
+    only skeletons - who rise again 5 s after falling. A trader waits at the
+    cave mouth (bombs destroy skeletons for good); old mine bridges, pits,
+    a high ledge, then a last hall with the passage deeper in (the exit)."""
+    b = LevelBuilder(rows=16, ceiling_air=(5, 6))
+    b.flat(10, 11, on={2: "P", 5: "M", 8: "o"})    # the trader, sheltering in the cave mouth
+    b.flat(4, 12, on={1: "j"})
+    b.flat(12, 12, on={3: "K", 7: "Z", 10: "o"})   # first skeleton, by a fallen samurai
+    b.flat(3, 11)
+    b.flat(6, 10, on={2: "j"})
+    b.gap(2)
+    b.flat(10, 10, on={2: "o", 4: "Z", 7: "j"})
+    b.bridge(5)                                    # old mine bridge
+    b.flat(12, 10, on={2: "K", 5: "Z", 9: "Z"})    # a pair
+    b.flat(3, 11)
+    b.flat(4, 12, on={1: "r"})
+    b.gap(3)
+    b.flat(14, 12, on={2: "j", 5: "Z", 9: "o", 11: "Z"})
+    b.flat(3, 11)
+    b.flat(3, 10, on={1: "j"})
+    b.flat(10, 9, on={3: "Z", 6: "K"})             # high ledge
+    b.bridge(6)
+    b.flat(4, 9)
+    b.flat(3, 10)
+    b.flat(18, 11, on={2: "o", 4: "Z", 8: "Z", 11: "j", 15: "C"})   # last hall + the way deeper
+    return b
+
+
+def wailing_depths():
+    """Stage 8, deeper in the caves: introduces the banshee. A lone banshee first
+    (room to learn her scream), one waiting on a bridge, banshees
+    backed by skeletons, a pair on a high ledge, then the passage onwards."""
+    b = LevelBuilder(rows=16, ceiling_air=(5, 6))
+    b.flat(10, 11, on={2: "P", 5: "M", 8: "o"})    # the trader again
+    b.flat(4, 12, on={1: "j"})
+    b.flat(14, 12, on={4: "K", 10: "W", 12: "o"})  # first banshee, alone: learn the scream
+    b.flat(3, 11)
+    b.gap(3)
+    b.flat(10, 11, on={2: "j", 6: "Z"})
+    b.bridge(6, on={3: "W"})                       # one waits on the old bridge
+    b.flat(12, 11, on={2: "o", 5: "W", 9: "Z"})    # banshee + skeleton
+    b.flat(3, 10)
+    b.flat(4, 9, on={1: "j"})
+    b.gap(2)
+    b.flat(12, 9, on={3: "W", 8: "W", 10: "K"})    # two banshees on a ledge
+    b.flat(3, 10)
+    b.flat(4, 11)
+    b.gap(3)
+    b.flat(14, 12, on={2: "Z", 7: "W", 11: "Z"})   # screamed at while skeletons close in
+    b.flat(3, 11)
+    b.flat(18, 11, on={2: "o", 5: "W", 9: "Z", 15: "C"})   # last stand, then onwards
+    return b
+
+
+def guardian_halls():
+    """Stage 9, an ancient fortress under the mountain: introduces the guardian
+    (spear + shield, arrows bounce off until it breaks). Guardians are rare -
+    only three, each with room around him (no skeleton right behind him, so
+    you aren't caught between a spear and a sword that keeps getting up):
+    one alone first, one holding the line while a banshee screams, and one in
+    the last hall before the old shrine gate out of the depths."""
+    b = LevelBuilder(rows=16, ceiling_air=(5, 6))
+    b.flat(10, 11, on={2: "P", 5: "M", 8: "l"})    # the trader; stone lanterns light the halls
+    b.flat(4, 12, on={1: "j"})
+    b.flat(16, 12, on={3: "K", 11: "U", 14: "l"})  # first guardian, alone: learn his thrust
+    b.flat(3, 11)
+    b.gap(3)                                       # too heavy to jump: he can't follow you
+    b.flat(10, 11, on={2: "o", 6: "Z"})
+    b.bridge(6)
+    b.flat(14, 11, on={3: "U", 10: "W", 12: "l"})  # he holds the line while she screams
+    b.flat(3, 10)
+    b.flat(4, 9, on={1: "j"})
+    b.gap(2)
+    b.flat(12, 9, on={3: "Z", 8: "j"})            # just a skeleton up here
+    b.flat(3, 10)
+    b.flat(4, 11, on={1: "o"})
+    b.gap(3)
+    b.flat(16, 12, on={2: "W", 7: "l", 11: "Z"})   # a banshee and a skeleton
+    b.flat(3, 11)
+    b.flat(20, 11, on={2: "l", 9: "U", 14: "l", 17: "X"})   # the last hall: one guardian, the gate out
+    return b
+
+
 if __name__ == "__main__":
     print(bamboo_valley().as_python("BAMBOO_VALLEY"))
     print()
@@ -229,3 +335,9 @@ if __name__ == "__main__":
     print(crimson_ridge().as_python("CRIMSON_RIDGE"))
     print()
     print(golems_gate().as_python("GOLEMS_GATE"))
+    print()
+    print(ancient_caves().as_python("ANCIENT_CAVES"))
+    print()
+    print(wailing_depths().as_python("WAILING_DEPTHS"))
+    print()
+    print(guardian_halls().as_python("GUARDIAN_HALLS"))

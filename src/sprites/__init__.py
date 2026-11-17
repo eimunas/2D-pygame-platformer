@@ -5,6 +5,9 @@ from src.sprites.effects import Afterimage, Effect, SlashStreak
 from src.sprites.enemy import Enemy
 from src.sprites.archer import Archer
 from src.sprites.shinobi import Shinobi
+from src.sprites.skeleton import Skeleton
+from src.sprites.banshee import Banshee
+from src.sprites.guardian import Guardian
 from src.sprites.npc import Trader
 from src.sprites.pickups import Coin, coin_spots
 from src.sprites.projectile import Arrow
@@ -16,5 +19,5 @@ __all__ = [
     "Animation", "load_frames", "load_image",
     "Decoration", "Rock", "Tree", "Prop", "ExitGate", "CaveEntrance", "ROCK_KINDS", "TREE_KINDS", "PROPS",
     "Effect", "Afterimage", "SlashStreak",
-    "PhysicsEntity", "Player", "Enemy", "Archer", "Shinobi", "Arrow", "Bomb", "Explosion", "Trader", "Coin", "coin_spots",
+    "PhysicsEntity", "Player", "Enemy", "Archer", "Shinobi", "Skeleton", "Banshee", "Guardian", "Arrow", "Bomb", "Explosion", "Trader", "Coin", "coin_spots",
 ]

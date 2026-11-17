@@ -104,6 +104,10 @@ class Arrow(pygame.sprite.Sprite):
         if self.friendly:
             for enemy in self.game.enemies:
                 if not enemy.invulnerable and enemy.hitbox.collidepoint(tx, ty):
+                    if getattr(enemy, "blocks_arrows", False):   # e.g. the guardian's shield
+                        enemy.deflect_arrow(self)
+                        self.kill()
+                        return
                     enemy.take_damage(self.damage, self.pos.x - math.copysign(100, self.vel.x))
                     self.kill()
                     return

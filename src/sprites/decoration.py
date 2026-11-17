@@ -24,6 +24,9 @@ PROPS = {
     "lantern": ("props/lantern.png", "back"),
     "torii": ("props/torii.png", "back"),
     "cave_entrance": ("props/cave_entrance.png", "back"),
+    "barrel": ("props/barrel.png", "back"),
+    "bones": ("props/bones.png", "back"),
+    "samurai_remains": ("props/samurai_remains.png", "back"),
     "bush": ("plants/bush.png", "front"),
     "bush_small": ("plants/bush_small.png", "front"),
 }

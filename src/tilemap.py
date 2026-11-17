@@ -12,6 +12,7 @@ You only say *what* goes in a cell; the tilemap picks the right image:
 
 Tile types:
     grass, dirt          solid blocks, autotiled by their 4 neighbours
+    rock_top, rock       the same for caves (rocky floor surface, solid rock)
     bridge               one-way platform: stand on it, jump up through it
 
 Mask bits (set = that side is exposed / neighbour is empty):
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 N, E, S, W = 1, 2, 4, 8
 NEIGHBOURS = ((0, -1, N), (1, 0, E), (0, 1, S), (-1, 0, W))
 
-SOLID = {"grass", "dirt"}                  # block movement from every side
+SOLID = {"grass", "dirt", "rock_top", "rock"}    # block movement from every side
 PLATFORMS = {"bridge"}                     # only solid when landing from above
 
 
@@ -65,7 +66,7 @@ class Tileset:
 
 
 class Tilemap:
-    KINDS = ("grass", "dirt", "bridge")
+    KINDS = ("grass", "dirt", "rock_top", "rock", "bridge")
 
     def __init__(self, game: Game, cols, rows, tile_size=settings.TILE_SIZE, edges_solid=True):
         """edges_solid: treat cells outside the map as solid, so the ground
@@ -79,7 +80,7 @@ class Tilemap:
 
         scale = settings.SCALE
         tiles_dir = os.path.join(settings.ASSETS_DIR, "tiles")
-        self.tilesets = {kind: Tileset(kind, scale) for kind in ("grass", "dirt")}
+        self.tilesets = {kind: Tileset(kind, scale) for kind in SOLID}
         # bridge images are 2 tiles tall: rails above, deck at the tile's top
         self.bridge_images = {
             piece: load_scaled(os.path.join(tiles_dir, "bridge", f"bridge_{piece}.png"), scale)

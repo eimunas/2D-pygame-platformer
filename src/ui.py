@@ -83,6 +83,15 @@ def draw_enemy_bar(surface, enemy, camera):
     world = pygame.Rect(0, 0, w, h)
     world.midbottom = (enemy.hitbox.centerx, enemy.hitbox.top - 14)
     draw_bar(surface, camera.apply(world), enemy.health, enemy.max_health)
+    if getattr(enemy, "shield", 0) > 0:                 # guardian: his shield, just above
+        frame = camera.apply(world.move(0, -(h + 2)))
+        pygame.draw.rect(surface, settings.HEALTH_FRAME, frame)
+        inner = frame.inflate(-2, -2)
+        pygame.draw.rect(surface, settings.HEALTH_EMPTY, inner)
+        inner.width = round(inner.width * enemy.shield / enemy.shield_max)
+        pygame.draw.rect(surface, settings.SHIELD_BAR_FILL, inner)
+        inner.height = max(1, inner.height // 3)
+        pygame.draw.rect(surface, settings.SHIELD_BAR_FILL_HI, inner)
 
 
 def draw_coin_counter(surface, icon, small_font, coins, topright, font=None):

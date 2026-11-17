@@ -50,6 +50,8 @@ class Enemy(PhysicsEntity):
     PLAY_ONCE = ("attack",)                    # animations that don't loop
     MODE_ANIM = MODE_ANIM
     HITBOX = settings.SAMURAI_HITBOX
+    WALK_SPEED = settings.SAMURAI_WALK_SPEED
+    RUN_SPEED = settings.SAMURAI_RUN_SPEED
     MAX_HEALTH = settings.SAMURAI_MAX_HEALTH
     SIGHT_RANGE = settings.SAMURAI_SIGHT_RANGE
     SIGHT_HEIGHT = settings.SAMURAI_SIGHT_HEIGHT
@@ -58,6 +60,10 @@ class Enemy(PhysicsEntity):
     ATTACK_ACTIVE_FRAMES = settings.SAMURAI_ATTACK_ACTIVE_FRAMES
     BLADE_REACH = 12                           # art px from his centre the blade reaches
     DAMAGE = settings.SAMURAI_DAMAGE
+    ATTACK_RANGE = settings.SAMURAI_ATTACK_RANGE       # gap (px) between bodies to start an attack
+    ATTACK_COOLDOWN = settings.SAMURAI_ATTACK_COOLDOWN
+    KNOCKBACK = settings.SAMURAI_KNOCKBACK
+    HURT_TIME = settings.SAMURAI_HURT_TIME
     LEAP_SPEED = settings.SAMURAI_LEAP_SPEED           # take-off speed when jumping a pit
     LEAP_RUN_SPEED = settings.SAMURAI_LEAP_RUN_SPEED   # forward speed while in that jump
 
@@ -253,7 +259,7 @@ class Enemy(PhysicsEntity):
             self.face_player()
             dx, dy = self.player_offset()
             gap = abs(dx) - (self.hitbox.width + self.game.player.hitbox.width) / 2
-            if gap <= settings.SAMURAI_ATTACK_RANGE and abs(dy) < self.hitbox.height:
+            if gap <= self.ATTACK_RANGE and abs(dy) < self.hitbox.height:
                 self.start_attack()
                 return
             if self.try_leap():
@@ -266,7 +272,7 @@ class Enemy(PhysicsEntity):
 
         elif mode == "attack":
             if self.animations["attack"].finished:
-                self.set_mode("recover", settings.SAMURAI_ATTACK_COOLDOWN)
+                self.set_mode("recover", self.ATTACK_COOLDOWN)
 
         elif mode == "recover":
             self.face_player()
@@ -285,11 +291,11 @@ class Enemy(PhysicsEntity):
             return None
         facing = 1 if self.facing_right else -1
         if self.mode == "patrol_walk":
-            return facing * settings.SAMURAI_WALK_SPEED
+            return facing * self.WALK_SPEED
         if self.mode == "chase" and self.leaping:
             return facing * self.LEAP_RUN_SPEED
         if self.mode == "chase" and not self.dangerous_drop_ahead():
-            return facing * settings.SAMURAI_RUN_SPEED
+            return facing * self.RUN_SPEED
         return 0
 
     # ------------------------------------------------------------ combat
@@ -297,6 +303,11 @@ class Enemy(PhysicsEntity):
     def invulnerable(self):
         """True while the player's blade and arrows can't hurt him."""
         return False
+
+    @property
+    def show_health_bar(self):
+        """Draw the small bar over his head? (The boss has a big one instead.)"""
+        return not getattr(self, "BOSS", False)
 
     @property
     def attack_hitbox(self):
@@ -318,9 +329,9 @@ class Enemy(PhysicsEntity):
             self.die()
             return
         away = 1 if self.hitbox.centerx >= source_x else -1
-        kx, ky = settings.SAMURAI_KNOCKBACK
+        kx, ky = self.KNOCKBACK
         self.vel.update(away * kx, -ky)
-        self.set_mode("hurt", settings.SAMURAI_HURT_TIME)      # also cancels his attack
+        self.set_mode("hurt", self.HURT_TIME)      # also cancels his attack
         self.game.camera.shake(*settings.ENEMY_HIT_SHAKE)
 
     def die(self):

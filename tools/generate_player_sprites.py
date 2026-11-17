@@ -53,7 +53,7 @@ PALETTE = {
 }
 
 # Which character draw_ninja() draws: "ninja" (player), "samurai", "archer",
-# "shinobi" (enemies) or "trader" (NPC). The generators in tools/ switch this and PALETTE.
+# "shinobi", "skeleton" (enemies) or "trader" (NPC). The generators in tools/ switch this and PALETTE.
 STYLE = "ninja"
 
 
@@ -138,8 +138,9 @@ def write_png(path, rows, width, height):
 def draw_leg(cv, hip_x, hip_y, foot_x, foot_y, bend, color):
     knee_x = (hip_x + foot_x) / 2 + bend
     knee_y = (hip_y + foot_y) / 2
-    cv.line(hip_x, hip_y, knee_x, knee_y, color, width=2)
-    cv.line(knee_x, knee_y, foot_x, foot_y, color, width=2)
+    width = 1 if STYLE == "skeleton" else 2     # bare bones are thin
+    cv.line(hip_x, hip_y, knee_x, knee_y, color, width=width)
+    cv.line(knee_x, knee_y, foot_x, foot_y, color, width=width)
     # shin wrap (one band just above the foot)
     cv.set(foot_x, foot_y - 1, PALETTE["wrap"])
     cv.set(foot_x + 1, foot_y - 1, PALETTE["wrap"])
@@ -175,6 +176,7 @@ def draw_ninja(pose, outline=True):
     archer = STYLE == "archer"
     shinobi = STYLE == "shinobi"           # enemy ninja: dagger at the hip, no katana
     trader = STYLE == "trader"             # NPC merchant: straw hat, big pack, no weapon
+    skeleton = STYLE == "skeleton"         # cave undead: bones, skull, ember eyes, stone sword
     armoured = samurai or archer
 
     # behind everything: ninja katana on the back, samurai katana at the hip,
@@ -193,7 +195,7 @@ def draw_ninja(pose, outline=True):
         cv.rect(tx0 - 3, torso_y - 1, tx0, torso_y - 1, P["pack_sh"])       # shelf
         cv.rect(tx0 - 2, torso_y - 6, tx0, torso_y - 5, P["bundle"])        # cloth bundle
         cv.set(tx0 - 1, torso_y - 6, P["bundle_hi"])
-    elif not shinobi:
+    elif not (shinobi or skeleton):
         cv.line(tx0 - 1, torso_y, tx0 + 3, torso_y + 3, P["sheath"])
 
     # back arm
@@ -205,8 +207,14 @@ def draw_ninja(pose, outline=True):
     draw_leg(cv, hip_x, hip_y, hip_x + fx, 14 - lift, pose["back_bend"], P["leg_sh"])
 
     # torso
-    cv.rect(tx0, torso_y, tx0 + 3, torso_y + 3, P["suit"])
-    cv.rect(tx0, torso_y + 3, tx0 + 3, torso_y + 3, P["red_dk"])  # sash / obi
+    if skeleton:                                  # ribcage around the spine, then the pelvis
+        cv.rect(tx0 + 1, torso_y, tx0 + 1, torso_y + 3, P["suit_sh"])        # spine
+        cv.rect(tx0, torso_y, tx0 + 3, torso_y, P["suit"])                   # ribs
+        cv.rect(tx0 + 1, torso_y + 2, tx0 + 3, torso_y + 2, P["suit"])
+        cv.rect(tx0, torso_y + 3, tx0 + 3, torso_y + 3, P["red_dk"])         # pelvis
+    else:
+        cv.rect(tx0, torso_y, tx0 + 3, torso_y + 3, P["suit"])
+        cv.rect(tx0, torso_y + 3, tx0 + 3, torso_y + 3, P["red_dk"])  # sash / obi
     if armoured:
         cv.rect(tx0, torso_y + 1, tx0 + 3, torso_y + 1, P["suit_sh"])  # armour lacing band
     if samurai:
@@ -231,6 +239,17 @@ def draw_ninja(pose, outline=True):
         cv.set(hx0 + 3, head_y - 1, P["guard"])                        # maedate (crest)
         cv.set(hx0 + 2, head_y - 2, P["guard"])
         cv.set(hx0 + 4, head_y - 2, P["guard"])
+    elif skeleton:
+        # skull: dome, a dark eye socket with an ember glowing in it, nose hole, teeth
+        cv.rect(hx0, head_y, hx0 + 4, head_y + 3, P["suit"])
+        cv.rect(hx0, head_y + 1, hx0, head_y + 3, P["suit_sh"])        # back of the skull
+        cv.set(hx0 + 1, head_y, P["suit_hi"])
+        cv.set(hx0 + 2, head_y, P["suit_hi"])
+        cv.rect(hx0 + 2, head_y + 2, hx0 + 3, head_y + 2, P["eye"])   # socket
+        cv.set(hx0 + 3, head_y + 2, P["ember"])
+        cv.set(hx0 + 4, head_y + 3, P["eye"])                          # nose hole
+        cv.rect(hx0 + 2, head_y + 4, hx0 + 4, head_y + 4, P["suit_sh"])   # jaw
+        cv.set(hx0 + 3, head_y + 4, P["suit"])                         # teeth
     elif trader:
         # straw hat, friendly face with a grey beard
         cv.rect(hx0, head_y + 1, hx0 + 4, head_y + 4, P["skin"])      # face
@@ -270,7 +289,7 @@ def draw_ninja(pose, outline=True):
             cv.set(tx0 + 4, torso_y + 2, P["guard"])
             cv.set(tx0 + 5, torso_y + 1, P["hilt"])
             cv.set(tx0 + 6, torso_y, P["hilt"])
-        elif archer or trader:                        # no katana
+        elif archer or trader or skeleton:            # no katana (the skeleton's sword is in hand)
             pass
         elif shinobi:                                 # tanto tucked in the sash
             cv.set(tx0 + 4, torso_y + 3, P["sheath"])
@@ -282,7 +301,7 @@ def draw_ninja(pose, outline=True):
             cv.set(hx0 - 3, torso_y - 2, P["hilt"])
 
     # headband tails (ninjas only)
-    if not armoured and not trader:
+    if not armoured and not trader and not skeleton:
         tx, ty = hx0 - 1, head_y + 1
         for dx, dy in pose["tail2"]:
             cv.set(tx + dx, ty + dy, P["red_dk"])

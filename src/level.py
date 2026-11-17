@@ -4,6 +4,9 @@ Tiles:        G grass    D dirt     . empty
               =  wooden bridge (one-way: jump up through it, hold S to drop)
 Player:       P  (feet on the bottom of this cell)
 Enemies:      E  samurai (patrols, chases and slashes the ninja when he spots him)
+              Z  skeleton (stone sword; collapses when killed and rises again 5 s later)
+              W  banshee (walks slowly; her scream pushes back + stuns)
+              U  guardian (tall, slow, spear + shield: arrows bounce off until the shield breaks)
               A  samurai archer (spots from far away, keeps distance, shoots arcing arrows)
               N  shinobi (enemy ninja: fast, dagger stabs, dashes at you every 3 s)
 Trees:        s sakura   p pine     b bamboo                 (behind the player)
@@ -14,6 +17,10 @@ Boss arena:   S  rune seal: the arena entrance (closed until every other enemy i
               B  where the stone golem lands (he drops in when you walk past the seal)
 NPCs:         M  wandering trader (merchant) - press E next to him to open the shop
 Rocks/plants: r pebbles  m boulder  c cairn  u bush  v small bush   (in front)
+Cave props:   o barrel   j bones    K fallen samurai's remains      (behind the player)
+
+A level can swap the tiles G/D are made of with "tiles", e.g. the caves use
+{"G": "rock_top", "D": "rock"}.
 
 Trees, props, rocks and the player stand on the bottom edge of their cell,
 centred horizontally - so put them directly above a ground tile.
@@ -23,7 +30,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.sprites import Archer, CaveEntrance, Enemy, ExitGate, Player, Prop, Rock, Shinobi, Trader, Tree
+from src import settings
+from src.sprites import (Archer, Banshee, CaveEntrance, Enemy, ExitGate, Guardian, Player, Prop, Rock, Shinobi,
+                         Skeleton, Trader, Tree)
 from src.tilemap import Tilemap
 
 if TYPE_CHECKING:
@@ -32,7 +41,8 @@ if TYPE_CHECKING:
 TILES = {"G": "grass", "D": "dirt", "=": "bridge"}
 TREES = {"s": "sakura", "p": "pine", "b": "bamboo"}
 ROCKS = {"r": "pebbles", "m": "boulder", "c": "cairn"}
-PROPS = {"l": "lantern", "T": "torii", "u": "bush", "v": "bush_small"}
+PROPS = {"l": "lantern", "T": "torii", "u": "bush", "v": "bush_small",
+         "o": "barrel", "j": "bones", "K": "samurai_remains"}
 
 # "Shrine Hill": 90 x 16 tiles. Meadow -> stepped climb -> rocky step ->
 # bridge over a ravine -> summit with a torii -> descent past a cliff and a
@@ -171,6 +181,75 @@ GOLEMS_GATE = [
     "DDDDDDDDDDDDDDD" "DDDDDDDDDD..DDD" "DDDDDDDDD.....D" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDD",
 ]
 
+# "Ancient Caves": stage 7, inside the caves the stone golem guarded. Rocky floor
+# and ceiling (G/D drawn as rock_top/rock), a cave background, only skeletons -
+# who rise again after falling. A trader at the cave mouth; the exit (C) is the
+# passage deeper in. Built with tools/level_builder.py.
+ANCIENT_CAVES = [
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDD.......DDDD" "DDDD....DDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDD." "...D.......DDDD" "DDDDD....DDDD.." "....DDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D.D............" ".........DDDDDD" "DDDDDDDDDDDDDDD",
+    ".......DDDDDDDD" "DDDDDDDDDDD...." "..............." "..............." ".......DDDDDDDD" "DDDDDDDDDDDDD.." "..............." "............D.." "......DDDDDD...",
+    "..........DDDD." ".DDDDDDDD......" "..............." "..............." ".......DDDDDD.." "DDDDDDDDD......" "..............." "..............." "...............",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "...............",
+    "..............." "..............." "..............." "..............." "..............." "..............." ".......Z..K...." "..............." "...............",
+    "..............." "..............." ".j.......o.Z..j" ".........K..Z.." ".Z............." "..............." "..j.GGGGGGGGGG=" "=====GGGG......" "...............",
+    "..P..M..o......" "..............G" "GGGGG..GGGGGGGG" "GG=====GGGGGGGG" "GGGG..........." "..............." ".GGGDDDDDDDDDD." ".....DDDDGGG..o" ".Z...Z..j...C..",
+    "GGGGGGGGGG.j..." "..K...Z..o.GGGD" "DDDDD..DDDDDDDD" "DD.....DDDDDDDD" "DDDDGGG.r......" ".j..Z...o.Z..GG" "GDDDDDDDDDDDDD." ".....DDDDDDDGGG" "GGGGGGGGGGGGGGG",
+    "DDDDDDDDDDGGGGG" "GGGGGGGGGGGDDDD" "DDDDD..DDDDDDDD" "DD.....DDDDDDDD" "DDDDDDDGGGG...G" "GGGGGGGGGGGGGDD" "DDDDDDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDD..DDDDDDDD" "DD.....DDDDDDDD" "DDDDDDDDDDD...D" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDD..DDDDDDDD" "DD.....DDDDDDDD" "DDDDDDDDDDD...D" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDD..DDDDDDDD" "DD.....DDDDDDDD" "DDDDDDDDDDD...D" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDDDDDDDD",
+]
+
+# "Wailing Depths": stage 8, deeper in the caves - introduces the banshee (her
+# scream pushes the ninja back and stuns him), backed by skeletons. Same rocky
+# tiles and cave background, a ghostly green tint. Built with tools/level_builder.py.
+WAILING_DEPTHS = [
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDD..DDDDDD.." "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DD............." "........D..DDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    ".......DDDDDDDD" "DDDDDDDDDDDDD.." "...D.......DDDD" "DDDDD....DDDD.." "..............." "..............." "..DDDDDDDDDDDDD" "DDDD....DDDDD.." "......DD",
+    "..........DDDD." ".DDDDDDDD......" "..............." "..............." "..............." "..............." "...........DDDD" "DD............." "........",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "........",
+    "..............." "..............." "..............." "..............." "......j.......W" "....W.K........" "..............." "..............." "........",
+    "..............." "..............." "..............." "..............." ".....GGGG..GGGG" "GGGGGGGG......." "..............." "..............." "........",
+    "..P..M..o......" "..............." "......j...Z...." "..W....o..W...Z" "..GGGDDDD..DDDD" "DDDDDDDDGGG...." "..............." ".......o..W...Z" ".....C..",
+    "GGGGGGGGGG.j..." "...K.....W.o.GG" "G...GGGGGGGGGG=" "=====GGGGGGGGGG" "GGDDDDDDD..DDDD" "DDDDDDDDDDDGGGG" ".....Z....W...Z" "..GGGGGGGGGGGGG" "GGGGGGGG",
+    "DDDDDDDDDDGGGGG" "GGGGGGGGGGGGGDD" "D...DDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDD..DDDD" "DDDDDDDDDDDDDDD" "...GGGGGGGGGGGG" "GGDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D...DDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDD..DDDD" "DDDDDDDDDDDDDDD" "...DDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D...DDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDD..DDDD" "DDDDDDDDDDDDDDD" "...DDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D...DDDDDDDDDD." ".....DDDDDDDDDD" "DDDDDDDDD..DDDD" "DDDDDDDDDDDDDDD" "...DDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDD",
+]
+
+
+# "Guardian Halls": stage 9, an ancient fortress under the mountain - introduces
+# the guardian (tall, slow, spear + shield; arrows bounce off until it breaks) -
+# only three of them - with banshees and skeletons. Rocky tiles, cave background, warm torch-lit tint. Built with
+# tools/level_builder.py.
+GUARDIAN_HALLS = [
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDD.." "DDDDDDDDD...DDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDD.DD......" "..............." "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    ".......DDDDDDDD" "DDDDDDDDDDDDDDD" "...D.......DDDD" "DDDDD....DDDD.." "..............." "..............." "..D....DDDDDDDD" "DDDDDDDDDDDDD.." "......DDDDDD..." "D",
+    "..........DDDD." ".DDDDDDDD......" "..............." "..............." "..............." "..............." "...........DDDD" "DDDD..........." "..............." ".",
+    "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." "..............." ".",
+    "..............." "..............." "..............." "..............." "..........j...." "...Z....j......" "..............." "..............." "..............." ".",
+    "..............." "..............." "..............." "..............." ".........GGGG.." "GGGGGGGGGGGG..." "..............." "..............." "..............." ".",
+    "..P..M..l......" "..............." "........o...Z.." "..........U...." "..W.l.GGGDDDD.." "DDDDDDDDDDDDGGG" ".o............." ".............l." ".....U....l..X." ".",
+    "GGGGGGGGGG.j..." "..K.......U..l." "GGG...GGGGGGGGG" "G======GGGGGGGG" "GGGGGGDDDDDDD.." "DDDDDDDDDDDDDDD" "GGGG.....W....l" "...Z....GGGGGGG" "GGGGGGGGGGGGGGG" "G",
+    "DDDDDDDDDDGGGGG" "GGGGGGGGGGGGGGG" "DDD...DDDDDDDDD" "D......DDDDDDDD" "DDDDDDDDDDDDD.." "DDDDDDDDDDDDDDD" "DDDD...GGGGGGGG" "GGGGGGGGDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "D......DDDDDDDD" "DDDDDDDDDDDDD.." "DDDDDDDDDDDDDDD" "DDDD...DDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "D......DDDDDDDD" "DDDDDDDDDDDDD.." "DDDDDDDDDDDDDDD" "DDDD...DDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+    "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "DDD...DDDDDDDDD" "D......DDDDDDDD" "DDDDDDDDDDDDD.." "DDDDDDDDDDDDDDD" "DDDD...DDDDDDDD" "DDDDDDDDDDDDDDD" "DDDDDDDDDDDDDDD" "D",
+]
+
 
 # Levels in play order. Reaching the exit gate (X) loads the next one.
 LEVELS = [
@@ -183,11 +262,20 @@ LEVELS = [
     {"name": "Crimson Ridge", "layout": CRIMSON_RIDGE, "coins": 1, "background": "evening"},
     # "night": dark-blue veil over the world (settings.NIGHT_TINT)
     {"name": "Golem's Gate", "layout": GOLEMS_GATE, "coins": 1, "background": "night", "night": True},
+    # "tiles": which tiles G/D are made of; "tint": RGBA veil over the world; "music": own stage music
+    {"name": "Ancient Caves", "layout": ANCIENT_CAVES, "coins": 1, "background": "cave",
+     "tiles": {"G": "rock_top", "D": "rock"}, "tint": settings.CAVE_TINT, "music": "cave_background_music"},
+    {"name": "Wailing Depths", "layout": WAILING_DEPTHS, "coins": 1, "background": "cave",
+     "tiles": {"G": "rock_top", "D": "rock"}, "tint": settings.WAILING_TINT, "music": "cave_background_music"},
+    {"name": "Guardian Halls", "layout": GUARDIAN_HALLS, "coins": 1, "background": "cave",
+     "tiles": {"G": "rock_top", "D": "rock"}, "tint": settings.GUARDIAN_HALL_TINT, "music": "cave_background_music"},
 ]
 
 
-def load_level(game: Game, layout):
-    """Create the tilemap, decorations and player. Returns the Tilemap."""
+def load_level(game: Game, layout, tiles=None):
+    """Create the tilemap, decorations and player. Returns the Tilemap.
+    tiles: optional {char: tile kind} overriding TILES (e.g. rocky cave tiles)."""
+    tile_kinds = dict(TILES, **(tiles or {}))
     rows, cols = len(layout), max(len(line) for line in layout)
     tilemap = Tilemap(game, cols, rows)
     ts = tilemap.tile_size
@@ -195,8 +283,8 @@ def load_level(game: Game, layout):
     for row, line in enumerate(layout):
         for col, ch in enumerate(line):
             feet = (col * ts + ts // 2, (row + 1) * ts)  # midbottom of the cell
-            if ch in TILES:
-                tilemap.set_tile(col, row, TILES[ch])
+            if ch in tile_kinds:
+                tilemap.set_tile(col, row, tile_kinds[ch])
             elif ch in TREES:
                 Tree(game, TREES[ch], feet)
             elif ch in ROCKS:
@@ -211,6 +299,12 @@ def load_level(game: Game, layout):
                 Archer(game, feet)
             elif ch == "N":
                 Shinobi(game, feet)
+            elif ch == "Z":
+                Skeleton(game, feet)
+            elif ch == "W":
+                Banshee(game, feet)
+            elif ch == "U":
+                Guardian(game, feet)
             elif ch == "M":
                 Trader(game, feet)
             elif ch == "X":

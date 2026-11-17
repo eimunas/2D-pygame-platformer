@@ -35,7 +35,7 @@ GOLD = (232, 186, 82)
 RED = (214, 52, 64)
 PANEL = (14, 12, 22)
 
-ROW_W, ROW_H, ROW_GAP = 440, 36, 6
+ROW_W, ROW_H, ROW_GAP = 440, 28, 3
 RESET_CONFIRM_TIME = 3.0           # seconds the "press again to confirm" stays armed
 
 
@@ -43,7 +43,7 @@ class MainMenu:
     def __init__(self, game: Game):
         self.game = game
         self.title_font = pygame.font.SysFont("consolas", 80, bold=True)
-        self.row_font = pygame.font.SysFont("consolas", 24, bold=True)
+        self.row_font = pygame.font.SysFont("consolas", 22, bold=True)
         self.small_font = pygame.font.SysFont("consolas", 18)
         self.selected = 0
         self.scroll = 0.0                  # background drift
@@ -213,7 +213,7 @@ class MainMenu:
             for k in range(coins):
                 found = progress.has_found(f"{LEVELS[item]['name']}#{k}")
                 icon = self.coin if found else self.coin_missing
-                surface.blit(icon, icon.get_rect(midright=(right - 96 - k * 30, rect.centery)))
+                surface.blit(icon, icon.get_rect(midright=(right - 80 - k * 30, rect.centery)))
         if locked:
             self.draw_lock(surface, (right - 10, rect.centery))
         elif progress.is_cleared(item):

@@ -80,6 +80,7 @@ class Player(PhysicsEntity):
         self.health = self.max_health
         self.invuln_timer = 0.0        # > 0: can't be hurt (blinking)
         self.hurt_timer = 0.0          # > 0: knocked back, no control
+        self.stun_timer = 0.0          # > 0: stunned (banshee scream): only slow walking
 
         # death (see die / update_dead)
         self.dead = False
@@ -110,8 +111,10 @@ class Player(PhysicsEntity):
             self.drop_through = False
             return
         keys = self.game.keys
+        stunned = self.stun_timer > 0            # no running, jumping, dashing or attacking
+        clicks = set() if stunned else self.game.mouse_just_pressed
         self.direction = self.get_direction()
-        self.running = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        self.running = (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and not stunned
         self.drop_through = keys[pygame.K_s]     # hold S to drop through bridges
 
         # turn first, so pressing a direction + dash/attack together goes that way
@@ -119,19 +122,19 @@ class Player(PhysicsEntity):
             self.facing_right = self.direction > 0
 
         # dash attack
-        if DASH_BUTTON in self.game.mouse_just_pressed and self.can_dash():
+        if DASH_BUTTON in clicks and self.can_dash():
             self.start_dash()
 
         # bow: left click shoots
         if self.weapon == "bow":
-            if ATTACK_BUTTON in self.game.mouse_just_pressed and self.can_shoot():
+            if ATTACK_BUTTON in clicks and self.can_shoot():
                 self.start_shot()
         # bomb: left click throws it (one use)
         elif self.weapon == "bomb":
-            if ATTACK_BUTTON in self.game.mouse_just_pressed and self.can_throw():
+            if ATTACK_BUTTON in clicks and self.can_throw():
                 self.throw_bomb()
         # katana combo
-        elif ATTACK_BUTTON in self.game.mouse_just_pressed and not self.dash_attacking:
+        elif ATTACK_BUTTON in clicks and not self.dash_attacking:
             if not self.attacking:
                 n = len(settings.PLAYER_ATTACKS)
                 self.start_attack((self.combo_step + 1) % n if self.combo_timer > 0 else 0)
@@ -155,9 +158,11 @@ class Player(PhysicsEntity):
             self.lunge_speed *= math.exp(-settings.ATTACK_LUNGE_DECAY * self.game.dt)
         else:
             speed = settings.RUN_SPEED if self.running else settings.WALK_SPEED
+            if stunned:
+                speed *= settings.STUN_WALK_FACTOR      # dazed: a slow stagger
             self.vel.x = self.direction * speed
 
-        jump_pressed = any(k in self.game.just_pressed for k in JUMP_KEYS)
+        jump_pressed = not stunned and any(k in self.game.just_pressed for k in JUMP_KEYS)
         if jump_pressed:
             self.jump_buffer_timer = settings.JUMP_BUFFER_TIME
 
@@ -319,6 +324,21 @@ class Player(PhysicsEntity):
             Afterimage(self.game, self.image, self.rect.topleft)
             self.ghost_timer += settings.GHOST_INTERVAL
 
+    def stun(self, duration):
+        """Dazed (the banshee's scream): for `duration` s he can only walk, slowly -
+        no running, jumping, dashing or attacking. Wisps circle over his head."""
+        if self.dead:
+            return
+        newly_stunned = self.stun_timer <= 0
+        self.stun_timer = max(self.stun_timer, duration)
+        if newly_stunned:
+            from src.sprites.banshee import StunMark      # (avoids a circular import)
+            StunMark(self.game, self)
+        self.cancel_attack()
+        self.cancel_dash()
+        self.cancel_shot()
+        self.jump_buffer_timer = 0.0
+
     # ------------------------------------------------------------ damage
     def take_damage(self, amount, source_x):
         """Hurt the player. Returns True if the hit counted.
@@ -347,6 +367,7 @@ class Player(PhysicsEntity):
         slowly collapses (update_dead). The game shows the defeat screen."""
         self.health = 0
         self.dead = True
+        self.stun_timer = 0.0
         self.hurt_timer = 0.0
         self.invuln_timer = 0.0
         self.direction = 0
@@ -448,6 +469,7 @@ class Player(PhysicsEntity):
         self.throw_cooldown = max(0.0, self.throw_cooldown - dt)
         self.invuln_timer = max(0.0, self.invuln_timer - dt)
         self.hurt_timer = max(0.0, self.hurt_timer - dt)
+        self.stun_timer = max(0.0, self.stun_timer - dt)
 
         self.handle_input()
         self.physics_update()
@@ -539,6 +561,7 @@ class Player(PhysicsEntity):
         self.respawn()
 
     def respawn(self):
+        self.stun_timer = 0.0
         self.pos.update(self.spawn_point)
         self.vel.update(0, 0)
         self.hitbox.midbottom = (round(self.pos.x), round(self.pos.y))

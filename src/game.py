@@ -77,11 +77,13 @@ class Game:
     def get_background(self, theme):
         """The parallax background for a theme in settings.BACKGROUND_THEMES."""
         if theme not in self.backgrounds:
-            folder = settings.BACKGROUND_THEMES[theme]
+            spec = settings.BACKGROUND_THEMES[theme]
+            if isinstance(spec, str):          # a folder with the five forest layer files
+                spec = [(os.path.join(spec, os.path.basename(path)), factor)
+                        for path, factor in settings.BACKGROUND_LAYERS]
             background = ParallaxBackground(self.screen.get_size())
-            for path, factor in settings.BACKGROUND_LAYERS:
-                file = os.path.join(settings.ASSETS_DIR, folder, os.path.basename(path))
-                background.add_layer(file, factor=factor)
+            for path, factor in spec:
+                background.add_layer(os.path.join(settings.ASSETS_DIR, path), factor=factor)
             self.backgrounds[theme] = background
         return self.backgrounds[theme]
 
@@ -120,7 +122,7 @@ class Game:
         self.exit_gate = None
         self.boss = None                       # the golem, once he has dropped in
         self.seal_pos = self.boss_spawn = None # boss arena markers (level chars S / B)
-        self.tilemap = load_level(self, self.level["layout"])
+        self.tilemap = load_level(self, self.level["layout"], self.level.get("tiles"))
         if self.player is None:
             raise ValueError(f"Level '{self.level['name']}' has no 'P' (player spawn)")
         self.place_coins()
@@ -187,8 +189,13 @@ class Game:
     def start_music(self):
         """Loop the stage music (quietly) once gameplay begins - after the intro."""
         if not self.music_started:
-            self.audio.play_music(settings.LEVEL_MUSIC, loop=True, fade_ms=settings.MUSIC_FADE_IN_MS)
+            self.audio.play_music(self.level_music, loop=True, fade_ms=settings.MUSIC_FADE_IN_MS)
             self.music_started = True
+
+    @property
+    def level_music(self):
+        """The stage's own music (LEVELS[i]["music"]) or the default stage music."""
+        return self.level.get("music", settings.LEVEL_MUSIC)
 
     def complete_level(self):
         """The ninja walked through the exit gate."""
@@ -349,8 +356,8 @@ class Game:
         self.draw_group(self.projectiles)
         self.draw_group(self.effects_front)
         self.draw_group(self.foreground_decor)
-        if self.level.get("night"):
-            self.screen.blit(self.night_veil(), (0, 0))  # darkens the world, not the HUD
+        if self.world_tint:
+            self.screen.blit(self.tint_veil(), (0, 0))   # darkens the world, not the HUD
         if self.arena:
             self.arena.draw_world(self.screen, self.camera)   # glowing seal (over the veil)
         if self.in_cutscene:
@@ -374,11 +381,18 @@ class Game:
             self.draw_banner("Victory!", "All stages cleared  -  Enter: main menu   R: play again")
         pygame.display.flip()
 
-    def night_veil(self):
-        if getattr(self, "_night_veil", None) is None:
-            self._night_veil = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-            self._night_veil.fill(settings.NIGHT_TINT)
-        return self._night_veil
+    @property
+    def world_tint(self):
+        """RGBA veil over the world: LEVELS[i]["tint"], or NIGHT_TINT for "night" stages."""
+        return self.level.get("tint") or (settings.NIGHT_TINT if self.level.get("night") else None)
+
+    def tint_veil(self):
+        tint = self.world_tint
+        if getattr(self, "_veil_tint", None) != tint:
+            self._veil = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            self._veil.fill(tint)
+            self._veil_tint = tint
+        return self._veil
 
     def draw_group(self, group):
         """Draw a sprite group shifted by the camera, skipping off-screen sprites."""
@@ -390,8 +404,8 @@ class Game:
     def draw_enemy_bars(self):
         view = self.camera.view_rect
         for enemy in self.enemies:
-            if getattr(enemy, "BOSS", False):
-                continue                        # the boss has his own big bar
+            if not enemy.show_health_bar:
+                continue                        # the boss has his own big bar; bone piles have none
             if enemy.rect.colliderect(view):
                 draw_enemy_bar(self.screen, enemy, self.camera)
 
@@ -478,6 +492,6 @@ class Game:
             f"state: {p.state}   frame: {anim.index + 1}/{len(anim.frames)}   "
             f"air jumps: {p.air_jumps_left}",
         ]
-        color = (206, 212, 232) if self.level.get("night") else (30, 24, 30)   # readable at night
+        color = (206, 212, 232) if self.world_tint else (30, 24, 30)   # readable on dark stages
         for i, line in enumerate(lines):
             self.screen.blit(self.font.render(line, True, color), (16, bar.bottom + 10 + i * 26))

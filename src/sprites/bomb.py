@@ -81,7 +81,11 @@ class Bomb(PhysicsEntity):
         center = self.hitbox.center
         radius = settings.BOMB_RADIUS
         for enemy in list(self.game.enemies):          # list(): enemies may die here
-            if not enemy.invulnerable and rect_distance(center, enemy.hitbox) <= radius:
+            if rect_distance(center, enemy.hitbox) > radius:
+                continue
+            if hasattr(enemy, "on_blast"):              # e.g. skeletons: blown apart for good
+                enemy.on_blast(settings.BOMB_DAMAGE, center[0])
+            elif not enemy.invulnerable:
                 enemy.take_damage(settings.BOMB_DAMAGE, center[0])
         player = self.game.player
         if settings.BOMB_PLAYER_DAMAGE and rect_distance(center, player.hitbox) <= radius:
